@@ -25,11 +25,6 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
-import android.os.Build;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v4.content.ContextCompat;
-import android.support.v4.graphics.drawable.DrawableCompat;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -37,10 +32,15 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
+
 import com.gelakinetic.mtgfam.R;
 import com.tokenautocomplete.FilteredArrayAdapter;
 
 import java.util.LinkedHashMap;
+import java.util.Objects;
 
 public class ManaCostTextView extends ATokenTextView {
     private static final LinkedHashMap<String, BitmapDrawable> MANA_DRAWABLES = new LinkedHashMap<>();
@@ -98,7 +98,7 @@ public class ManaCostTextView extends ATokenTextView {
 
     public ManaCostTextView(Context context, AttributeSet attrs) {
         super(context, attrs);
-        this.allowDuplicates(true);
+        mAllowDuplicates = true;
         ManaSymbolAdapter manaSymbolAdapter = new ManaSymbolAdapter();
         this.setAdapter(manaSymbolAdapter);
     }
@@ -106,7 +106,7 @@ public class ManaCostTextView extends ATokenTextView {
     @Override
     protected View getViewForObject(String symbol) {
         LayoutInflater l = (LayoutInflater) getContext().getSystemService(Activity.LAYOUT_INFLATER_SERVICE);
-        ImageView view = (ImageView) l.inflate(R.layout.mana_token, (ViewGroup) getParent(), false);
+        ImageView view = (ImageView) Objects.requireNonNull(l).inflate(R.layout.mana_token, (ViewGroup) getParent(), false);
         BitmapDrawable bitmapDrawable = MANA_DRAWABLES.get(symbol);
         if (bitmapDrawable == null) {
             int resId = MANA_SYMBOLS.get(symbol);
@@ -149,11 +149,8 @@ public class ManaCostTextView extends ATokenTextView {
 
     private static Bitmap getBitmapFromVectorDrawable(Context context, int drawableId) {
         Drawable drawable = ContextCompat.getDrawable(context, drawableId);
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
-            drawable = (DrawableCompat.wrap(drawable)).mutate();
-        }
 
-        Bitmap bitmap = Bitmap.createBitmap(drawable.getIntrinsicWidth(),
+        Bitmap bitmap = Bitmap.createBitmap(Objects.requireNonNull(drawable).getIntrinsicWidth(),
                 drawable.getIntrinsicHeight(), Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());

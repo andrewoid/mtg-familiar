@@ -22,6 +22,7 @@ package com.gelakinetic.mtgfam.helpers;
 import android.app.Activity;
 import android.content.Context;
 import android.database.Cursor;
+import android.database.CursorIndexOutOfBoundsException;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
 
@@ -36,7 +37,10 @@ import com.gelakinetic.mtgfam.helpers.tcgp.MarketPriceInfo;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
+
+import javax.annotation.Nullable;
 
 /**
  * Encapsulate all information about a magic card
@@ -46,7 +50,6 @@ public class MtgCard extends Card {
 
     /* Wish and trade list fields */
     String mSetName;
-    private String mSetNameMtgi;
     public int mNumberOf;
     public int mPrice; /* In cents */
     public String mMessage;
@@ -65,6 +68,7 @@ public class MtgCard extends Card {
         /* Database fields */
         mName = "";
         mExpansion = "";
+        mScryfallSetCode = "";
         mType = "";
         mRarity = '\0';
         mManaCost = "";
@@ -84,7 +88,6 @@ public class MtgCard extends Card {
 
         // From MtgCard
         this.mSetName = "";
-        this.mSetNameMtgi = "";
         this.mNumberOf = 0;
         this.mPrice = 0; /* In cents */
         this.mMessage = "";
@@ -102,6 +105,7 @@ public class MtgCard extends Card {
             // From Card
             this.mName = card.mName;
             this.mExpansion = card.mExpansion;
+            this.mScryfallSetCode = card.mScryfallSetCode;
             this.mType = card.mType;
             this.mRarity = card.mRarity;
             this.mManaCost = card.mManaCost;
@@ -124,7 +128,6 @@ public class MtgCard extends Card {
 
             // From MtgCard
             this.mSetName = card.mSetName;
-            this.mSetNameMtgi = card.mSetNameMtgi;
             this.mNumberOf = card.mNumberOf;
             this.mPrice = card.mPrice; /* In cents */
             this.mMessage = card.mMessage;
@@ -165,7 +168,7 @@ public class MtgCard extends Card {
             this.mMessage = activity.getString(R.string.wishlist_loading);
             /* Get extra information from the database */
             if (cardSet == null) {
-                cardCursor = CardDbAdapter.fetchCardByName(cardName, CardDbAdapter.ALL_CARD_DATA_KEYS, true, true, database);
+                cardCursor = CardDbAdapter.fetchCardByName(cardName, CardDbAdapter.ALL_CARD_DATA_KEYS, true, true, true, database);
 
                 /* Make sure at least one card was found */
                 if (cardCursor.getCount() == 0) {
@@ -197,54 +200,13 @@ public class MtgCard extends Card {
                 throw new InstantiationException();
             }
 
-            /* Don't rely on the user's given name, get it from the DB just to be sure */
-            this.mName = cardCursor.getString(cardCursor.getColumnIndex(CardDbAdapter.KEY_NAME));
-            this.mExpansion = cardCursor.getString(cardCursor.getColumnIndex(CardDbAdapter.KEY_SET));
-            this.mSetName = CardDbAdapter.getSetNameFromCode(this.mExpansion, database);
-            this.mSetNameMtgi = CardDbAdapter.getCodeMtgi(this.mExpansion, database);
-            this.mNumber = cardCursor.getString(cardCursor
-                    .getColumnIndex(CardDbAdapter.KEY_NUMBER));
-            this.mCmc = cardCursor.getInt((cardCursor
-                    .getColumnIndex(CardDbAdapter.KEY_CMC)));
-            this.mColor = cardCursor.getString(cardCursor
-                    .getColumnIndex(CardDbAdapter.KEY_COLOR));
-            this.mType = CardDbAdapter.getTypeLine(cardCursor);
-            this.mRarity = (char) cardCursor.getInt(cardCursor
-                    .getColumnIndex(CardDbAdapter.KEY_RARITY));
-            this.mManaCost = cardCursor.getString(cardCursor
-                    .getColumnIndex(CardDbAdapter.KEY_MANACOST));
-            this.mPower = cardCursor.getInt(cardCursor
-                    .getColumnIndex(CardDbAdapter.KEY_POWER));
-            this.mToughness = cardCursor.getInt(cardCursor
-                    .getColumnIndex(CardDbAdapter.KEY_TOUGHNESS));
-            this.mLoyalty = cardCursor.getInt(cardCursor
-                    .getColumnIndex(CardDbAdapter.KEY_LOYALTY));
-            this.mText = cardCursor.getString(cardCursor
-                    .getColumnIndex(CardDbAdapter.KEY_ABILITY));
-            this.mFlavor = cardCursor.getString(cardCursor
-                    .getColumnIndex(CardDbAdapter.KEY_FLAVOR));
-            this.mMultiverseId = cardCursor.getInt(cardCursor
-                    .getColumnIndex(CardDbAdapter.KEY_MULTIVERSEID));
-            this.mArtist = cardCursor.getString(cardCursor
-                    .getColumnIndex(CardDbAdapter.KEY_ARTIST));
-            this.mWatermark = cardCursor.getString(cardCursor
-                    .getColumnIndex(CardDbAdapter.KEY_WATERMARK));
-            this.mColorIdentity = cardCursor.getString(cardCursor
-                    .getColumnIndex(CardDbAdapter.KEY_COLOR_IDENTITY));
-
-            this.mPrice = 0; /* In cents */
-            this.mIsCustomPrice = false; /* default is false as all cards should first grab internet prices. */
-            this.mSide = 0;
-            this.mPriceInfo = null;
-            this.mIndex = 0;
-            this.mIsSelected = false;
-            this.mIsSideboard = false;
+            initializeCardFromCursor(database, cardCursor);
 
             /* Override choice is the card can't be foil */
             if (!CardDbAdapter.canBeFoil(this.mExpansion, database)) {
                 this.mIsFoil = false;
             }
-        } catch (SQLiteException | FamiliarDbException | NumberFormatException fde) {
+        } catch (SQLiteException | FamiliarDbException | NumberFormatException | CursorIndexOutOfBoundsException fde) {
             throw new InstantiationException();
         } finally {
             if (null != cardCursor) {
@@ -252,6 +214,85 @@ public class MtgCard extends Card {
             }
             DatabaseManager.closeDatabase(activity, handle);
         }
+    }
+
+    /**
+     * Construct a MtgCard based on the given parameters.
+     *
+     * @param activity activity the method is being called from
+     * @param cardName name of the card to make
+     * @param cardSet  set code of the card to make
+     * @param isFoil   if the card is foil or not
+     * @param numberOf how many copies of the card are needed
+     * @param isSideboard Whether this card is in the sideboard
+     */
+    public MtgCard(
+            Activity activity,
+            String cardName,
+            String cardSet,
+            boolean isFoil,
+            int numberOf,
+            boolean isSideboard) throws InstantiationException {
+        this(activity, cardName, cardSet, isFoil, numberOf);
+        this.mIsSideboard = isSideboard;
+    }
+    /**
+     * Initialize all the database variables for this MtgCard from a Cursor
+     *
+     * @param database   The database the Cursor comes from
+     * @param cardCursor A cursor pointing to a row of card information
+     * @throws FamiliarDbException If there's a database error
+     */
+    private void initializeCardFromCursor(SQLiteDatabase database, Cursor cardCursor) throws FamiliarDbException {
+        /* Don't rely on the user's given name, get it from the DB just to be sure */
+        this.mName = cardCursor.getString(cardCursor.getColumnIndex(CardDbAdapter.KEY_NAME));
+        this.mExpansion = cardCursor.getString(cardCursor.getColumnIndex(CardDbAdapter.KEY_SET));
+        this.mSetName = CardDbAdapter.getSetNameFromCode(this.mExpansion, database);
+        this.mScryfallSetCode = cardCursor.getString(cardCursor
+                .getColumnIndex(CardDbAdapter.KEY_SCRYFALL_SET_CODE));
+        this.mNumber = cardCursor.getString(cardCursor
+                .getColumnIndex(CardDbAdapter.KEY_NUMBER));
+        this.mCmc = cardCursor.getInt((cardCursor
+                .getColumnIndex(CardDbAdapter.KEY_CMC)));
+        this.mColor = cardCursor.getString(cardCursor
+                .getColumnIndex(CardDbAdapter.KEY_COLOR));
+        this.mType = CardDbAdapter.getTypeLine(cardCursor);
+        this.mRarity = (char) cardCursor.getInt(cardCursor
+                .getColumnIndex(CardDbAdapter.KEY_RARITY));
+        this.mManaCost = cardCursor.getString(cardCursor
+                .getColumnIndex(CardDbAdapter.KEY_MANACOST));
+        this.mPower = cardCursor.getInt(cardCursor
+                .getColumnIndex(CardDbAdapter.KEY_POWER));
+        this.mToughness = cardCursor.getInt(cardCursor
+                .getColumnIndex(CardDbAdapter.KEY_TOUGHNESS));
+        this.mLoyalty = cardCursor.getInt(cardCursor
+                .getColumnIndex(CardDbAdapter.KEY_LOYALTY));
+        this.mText = cardCursor.getString(cardCursor
+                .getColumnIndex(CardDbAdapter.KEY_ABILITY));
+        this.mFlavor = cardCursor.getString(cardCursor
+                .getColumnIndex(CardDbAdapter.KEY_FLAVOR));
+        this.mMultiverseId = cardCursor.getInt(cardCursor
+                .getColumnIndex(CardDbAdapter.KEY_MULTIVERSEID));
+
+        // This card doesn't have a multiverseID, try to find an equivalent
+        if (mMultiverseId < 1) {
+            this.mMultiverseId = CardDbAdapter.getEquivalentMultiverseId(this.mName, database);
+        }
+
+        this.mArtist = cardCursor.getString(cardCursor
+                .getColumnIndex(CardDbAdapter.KEY_ARTIST));
+        this.mWatermark = cardCursor.getString(cardCursor
+                .getColumnIndex(CardDbAdapter.KEY_WATERMARK));
+        this.mColorIdentity = cardCursor.getString(cardCursor
+                .getColumnIndex(CardDbAdapter.KEY_COLOR_IDENTITY));
+
+        this.mPrice = 0; /* In cents */
+        this.mIsCustomPrice = false; /* default is false as all cards should first grab internet prices. */
+        this.mSide = 0;
+        this.mPriceInfo = null;
+        this.mIndex = 0;
+        this.mIsSelected = false;
+        this.mIsSideboard = false;
     }
 
     /**
@@ -268,7 +309,7 @@ public class MtgCard extends Card {
             String cardSet,
             boolean isFoil,
             int numberOf,
-            boolean isSideboard) throws InstantiationException {
+            boolean isSideboard) {
 
         // Fill in safe empty values
         this();
@@ -282,15 +323,30 @@ public class MtgCard extends Card {
     }
 
     /**
+     * Constructor to initialize a card from the data in a Cursor. Also sets default values for
+     * variables.
+     *
+     * @param database   The database the Cursor comes from
+     * @param cardCursor A cursor pointing to a row of card information
+     */
+    public MtgCard(SQLiteDatabase database, Cursor cardCursor) throws FamiliarDbException {
+        // Fill in safe empty values
+        this();
+
+        // Initialize from the cursor
+        initializeCardFromCursor(database, cardCursor);
+    }
+
+    /**
      * Given a list of cards with partial data, perform a single database operation to retrieve
      * the missing data, then add it to the cards in the list
      *
      * @param mCtx  A context to do database operations with
      * @param cards A list of cards to fill in data for
      */
-    public static void initCardListFromDb(Context mCtx, ArrayList<MtgCard> cards) throws FamiliarDbException {
+    public static void initCardListFromDb(Context mCtx, List<MtgCard> cards) throws FamiliarDbException {
         // First make sure there are cards to load data for
-        if(cards.isEmpty()) {
+        if (cards.isEmpty()) {
             return;
         }
 
@@ -315,7 +371,7 @@ public class MtgCard extends Card {
                     if (card.getName().equals(name) && card.getExpansion().equals(set)) {
                         try {
                             // Fill in the initial list with data from the cursor
-                            card.initFromCursor(mCtx, cardCursor);
+                            card.initFromCursor(mCtx, cardCursor, database);
                         } catch (java.lang.InstantiationException e) {
                             // Eat it
                         }
@@ -324,7 +380,7 @@ public class MtgCard extends Card {
                 }
                 cardCursor.moveToNext();
             }
-        } catch (SQLiteException | FamiliarDbException fde) {
+        } catch (SQLiteException | FamiliarDbException | CursorIndexOutOfBoundsException fde) {
             throw new FamiliarDbException(fde);
         } finally {
             if (null != cardCursor) {
@@ -341,7 +397,7 @@ public class MtgCard extends Card {
      * @param cardCursor A cursor pointing to this card's information from the database
      * @throws InstantiationException If this card can't be initialized
      */
-    private void initFromCursor(Context context, Cursor cardCursor) throws InstantiationException {
+    private void initFromCursor(Context context, Cursor cardCursor, SQLiteDatabase database) throws InstantiationException, FamiliarDbException {
 
         try {
             /* Note the card price is loading */
@@ -350,6 +406,7 @@ public class MtgCard extends Card {
             /* Don't rely on the user's given name, get it from the DB just to be sure */
             this.mName = cardCursor.getString(cardCursor.getColumnIndex("c_" + CardDbAdapter.KEY_NAME));
             this.mExpansion = cardCursor.getString(cardCursor.getColumnIndex("c_" + CardDbAdapter.KEY_SET));
+            this.mScryfallSetCode = cardCursor.getString(cardCursor.getColumnIndex("c_" + CardDbAdapter.KEY_SCRYFALL_SET_CODE));
             this.mNumber = cardCursor.getString(cardCursor.getColumnIndex("c_" + CardDbAdapter.KEY_NUMBER));
             this.mCmc = cardCursor.getInt((cardCursor.getColumnIndex("c_" + CardDbAdapter.KEY_CMC)));
             this.mColor = cardCursor.getString(cardCursor.getColumnIndex("c_" + CardDbAdapter.KEY_COLOR));
@@ -368,12 +425,17 @@ public class MtgCard extends Card {
             this.mText = cardCursor.getString(cardCursor.getColumnIndex("c_" + CardDbAdapter.KEY_ABILITY));
             this.mFlavor = cardCursor.getString(cardCursor.getColumnIndex("c_" + CardDbAdapter.KEY_FLAVOR));
             this.mMultiverseId = cardCursor.getInt(cardCursor.getColumnIndex("c_" + CardDbAdapter.KEY_MULTIVERSEID));
+
+            // This card doesn't have a multiverseID, try to find an equivalent
+            if (mMultiverseId < 1) {
+                this.mMultiverseId = CardDbAdapter.getEquivalentMultiverseId(this.mName, database);
+            }
+
             this.mArtist = cardCursor.getString(cardCursor.getColumnIndex("c_" + CardDbAdapter.KEY_ARTIST));
             this.mWatermark = cardCursor.getString(cardCursor.getColumnIndex("c_" + CardDbAdapter.KEY_WATERMARK));
             this.mColorIdentity = cardCursor.getString(cardCursor.getColumnIndex("c_" + CardDbAdapter.KEY_COLOR_IDENTITY));
 
             this.mSetName = cardCursor.getString(cardCursor.getColumnIndex("s_" + CardDbAdapter.KEY_NAME));
-            this.mSetNameMtgi = cardCursor.getString(cardCursor.getColumnIndex("s_" + CardDbAdapter.KEY_CODE_MTGI));
 
             // Don't mess with any of the other MtgCard specific fields that may have been loaded fron files, like mIsCustomPrice
 
@@ -430,37 +492,42 @@ public class MtgCard extends Card {
      * @param activity The activity for database access
      * @return An initialized MtgCard
      */
-    public static MtgCard fromTradeString(String line, Activity activity) throws InstantiationException {
+    public static @Nullable
+    MtgCard fromTradeString(String line, Activity activity) {
 
-        /* Parse these parts out of the string */
-        String[] parts = line.split(DELIMITER);
+        try {
+            /* Parse these parts out of the string */
+            String[] parts = line.split(DELIMITER);
 
-        /* Correct the mExpansion code for Duel Deck Anthologies */
-        if (parts[2].equals("DD3")) {
-            FamiliarDbHandle handle = new FamiliarDbHandle();
-            try {
-                SQLiteDatabase database = DatabaseManager.openDatabase(activity, false, handle);
-                parts[2] = CardDbAdapter.getCorrectSetCode(parts[1], parts[2], database);
-            } catch (SQLiteException | FamiliarDbException e) {
-                /* Oops, Expansion may be wrong */
-            } finally {
-                DatabaseManager.closeDatabase(activity, handle);
+            /* Correct the mExpansion code for Duel Deck Anthologies */
+            if (parts[2].equals("DD3")) {
+                FamiliarDbHandle handle = new FamiliarDbHandle();
+                try {
+                    SQLiteDatabase database = DatabaseManager.openDatabase(activity, false, handle);
+                    parts[2] = CardDbAdapter.getCorrectSetCode(parts[1], parts[2], database);
+                } catch (SQLiteException | FamiliarDbException e) {
+                    /* Oops, Expansion may be wrong */
+                } finally {
+                    DatabaseManager.closeDatabase(activity, handle);
+                }
             }
+
+            MtgCard card = new MtgCard(parts[1], parts[2], false, Integer.parseInt(parts[3]), false);
+            card.mSide = Integer.parseInt(parts[0]);
+
+            /* These parts may not exist */
+            card.mIsCustomPrice = parts.length > 4 && Boolean.parseBoolean(parts[4]);
+            if (parts.length > 5) {
+                card.mPrice = Integer.parseInt(parts[5]);
+            } else {
+                card.mPrice = 0;
+            }
+            card.mIsFoil = parts.length > 6 && Boolean.parseBoolean(parts[6]);
+
+            return card;
+        } catch (IndexOutOfBoundsException e) {
+            return null;
         }
-
-        MtgCard card = new MtgCard(parts[1], parts[2], false, Integer.parseInt(parts[3]), false);
-        card.mSide = Integer.parseInt(parts[0]);
-
-        /* These parts may not exist */
-        card.mIsCustomPrice = parts.length > 4 && Boolean.parseBoolean(parts[4]);
-        if (parts.length > 5) {
-            card.mPrice = Integer.parseInt(parts[5]);
-        } else {
-            card.mPrice = 0;
-        }
-        card.mIsFoil = parts.length > 6 && Boolean.parseBoolean(parts[6]);
-
-        return card;
     }
 
     /**
@@ -517,29 +584,33 @@ public class MtgCard extends Card {
      * @param line     Information about this card, in the form of what toWishlistString() prints
      * @param activity A context used for getting localized strings
      */
-    public static MtgCard fromWishlistString(String line, boolean isSideboard, Activity activity) throws InstantiationException {
+    public static @Nullable
+    MtgCard fromWishlistString(String line, boolean isSideboard, Activity activity) {
+        try {
+            String[] parts = line.split(MtgCard.DELIMITER);
 
-        String[] parts = line.split(MtgCard.DELIMITER);
-
-        /* Correct the mExpansion code for Duel Deck Anthologies */
-        if (parts[1].equals("DD3")) {
-            FamiliarDbHandle handle = new FamiliarDbHandle();
-            try {
-                SQLiteDatabase database = DatabaseManager.openDatabase(activity, false, handle);
-                parts[1] = CardDbAdapter.getCorrectSetCode(parts[0], parts[1], database);
-            } catch (SQLiteException | FamiliarDbException e) {
-                /* Eat it and use the old mExpansion code. */
-            } finally {
-                DatabaseManager.closeDatabase(activity, handle);
+            /* Correct the mExpansion code for Duel Deck Anthologies */
+            if (parts[1].equals("DD3")) {
+                FamiliarDbHandle handle = new FamiliarDbHandle();
+                try {
+                    SQLiteDatabase database = DatabaseManager.openDatabase(activity, false, handle);
+                    parts[1] = CardDbAdapter.getCorrectSetCode(parts[0], parts[1], database);
+                } catch (SQLiteException | FamiliarDbException e) {
+                    /* Eat it and use the old mExpansion code. */
+                } finally {
+                    DatabaseManager.closeDatabase(activity, handle);
+                }
             }
-        }
-        /* "foil" didn't exist in earlier versions, so it may not be part of the string */
-        boolean foil = false;
-        if (parts.length > 5) {
-            foil = Boolean.parseBoolean(parts[5]);
-        }
+            /* "foil" didn't exist in earlier versions, so it may not be part of the string */
+            boolean foil = false;
+            if (parts.length > 5) {
+                foil = Boolean.parseBoolean(parts[5]);
+            }
 
-        return new MtgCard(parts[0], parts[1], foil, Integer.parseInt(parts[2]), isSideboard);
+            return new MtgCard(parts[0], parts[1], foil, Integer.parseInt(parts[2]), isSideboard);
+        } catch (IndexOutOfBoundsException e) {
+            return null;
+        }
     }
 
     /**
@@ -556,9 +627,8 @@ public class MtgCard extends Card {
 
     @Override
     public int hashCode() {
-        int hash = 29;
-        hash = hash * 31 + mMultiverseId;
-        return hash;
+        // xor the name and expansion hash codes, used for equals()
+        return this.mName.hashCode() ^ this.mExpansion.hashCode();
     }
 
     /**
@@ -622,56 +692,18 @@ public class MtgCard extends Card {
      *
      * @param attempt      The attempt number, should increment by one for each attempt
      * @param cardLanguage The language to get the image for
-     * @param ctx          A context to use
      * @return The URL for this attempt
      */
-    public String getImageUrlString(int attempt, String cardLanguage, Context ctx) {
-
-        // Some trickery to figure out if we have a token
-        boolean isToken = false;
-        if (mType.contains("Token") || // try to take the easy way out
-                (mCmc == 0 && // Tokens have a CMC of 0
-                        // The only tokens in Gatherer are from Duel Decks
-                        mSetName.contains("Duel Decks") &&
-                        // The only tokens in Gatherer are creatures
-                        mType.contains("Creature"))) {
-            isToken = true;
-        }
-
-        // If the card is english or a token, skip over the foreign MTGI attempt
-        if (cardLanguage.equalsIgnoreCase("en") || isToken) {
-            attempt++;
-        }
-
-        // If the card is a token, skip over the other MTGI attempt too
-        if (isToken && attempt >= 2) {
-            attempt++;
-        }
-
+    public String getImageUrlString(int attempt, String cardLanguage) {
         // Try getting a URL
         try {
-            switch (attempt) {
-                case 0: {
-                    // Try magiccards.info, foreign
-                    return getMtgiPicUrl(cardLanguage, ctx).toString();
-                }
-                case 1: {
-                    // Try scryfall
-                    return getScryfallImageUrl().toString();
-                }
-                case 2: {
-                    // Try magiccards.info, but english this time
-                    return getMtgiPicUrl("en", ctx).toString();
-                }
-                case 3: {
-                    // try gatherer
-                    return getGathererImageUrl().toString();
-                }
-                default: {
-                    // Return null, indicating we're out of attempts
-                    return null;
-                }
+            // Try scryfall first
+            URL url;
+            if (null == (url = getScryfallImageUrl(cardLanguage, attempt))) {
+                // If scryfall returns null, try gatherer
+                url = getGathererImageUrl();
             }
+            return url.toString();
         } catch (MalformedURLException | NullPointerException e) {
             // Return null, indicating a bad URL
             return null;
@@ -679,65 +711,32 @@ public class MtgCard extends Card {
     }
 
     /**
-     * Jumps through hoops and returns a correctly formatted URL for magiccards.info's image.
-     *
-     * @param cardLanguage The language of the card
-     * @param ctx          A context to get strings with
-     * @return a URL to the card's image
-     * @throws MalformedURLException If we screw up building the URL
-     */
-    private URL getMtgiPicUrl(String cardLanguage, Context ctx) throws MalformedURLException {
-
-        final String mtgiExtras = "http://magiccards.info/extras/";
-        String picURL;
-        if (mType.toLowerCase().contains(ctx.getString(R.string.search_Ongoing).toLowerCase()) ||
-                /* extra space to not confuse with planeswalker */
-                mType.toLowerCase().contains(ctx.getString(R.string.search_Plane).toLowerCase() + " ") ||
-                mType.toLowerCase().contains(ctx.getString(R.string.search_Phenomenon).toLowerCase()) ||
-                mType.toLowerCase().contains(ctx.getString(R.string.search_Scheme).toLowerCase())) {
-            switch (mExpansion) {
-                case "PC2":
-                    picURL = mtgiExtras + "plane/planechase-2012-edition/" + mName + ".jpg";
-                    picURL = picURL.replace(" ", "-")
-                            .replace("?", "").replace(",", "").replace("'", "").replace("!", "");
-                    break;
-                case "PCH":
-                    String cardNameTmp = mName;
-                    if (cardNameTmp.equalsIgnoreCase("tazeem")) {
-                        cardNameTmp = "tazeem-release-promo";
-                    } else if (cardNameTmp.equalsIgnoreCase("celestine reef")) {
-                        cardNameTmp = "celestine-reef-pre-release-promo";
-                    } else if (cardNameTmp.equalsIgnoreCase("horizon boughs")) {
-                        cardNameTmp = "horizon-boughs-gateway-promo";
-                    }
-                    picURL = mtgiExtras + "plane/planechase/" + cardNameTmp + ".jpg";
-                    picURL = picURL.replace(" ", "-")
-                            .replace("?", "").replace(",", "").replace("'", "").replace("!", "");
-                    break;
-                case "ARC":
-                    picURL = mtgiExtras + "scheme/archenemy/" + mName + ".jpg";
-                    picURL = picURL.replace(" ", "-")
-                            .replace("?", "").replace(",", "").replace("'", "").replace("!", "");
-                    break;
-                default:
-                    picURL = "http://magiccards.info/scans/" + cardLanguage + "/" + mSetNameMtgi + "/" +
-                            mNumber + ".jpg";
-                    break;
-            }
-        } else {
-            picURL = "http://magiccards.info/scans/" + cardLanguage + "/" + mSetNameMtgi + "/" + mNumber + ".jpg";
-        }
-        return new URL(picURL.toLowerCase(Locale.ENGLISH));
-    }
-
-    /**
      * Easily gets the URL for the Scryfall image for a card by multiverseid.
      *
+     * @param lang    The requested language for this card
+     * @param attempt
      * @return URL of the card image
      * @throws MalformedURLException If we screw up building the URL
      */
-    private URL getScryfallImageUrl() throws MalformedURLException {
-        return new URL("https://api.scryfall.com/cards/multiverse/" + mMultiverseId + "?format=image&version=normal");
+    private URL getScryfallImageUrl(String lang, int attempt) throws MalformedURLException {
+        // Only do one attempt for scryfall
+        if (attempt > 0) {
+            return null;
+        }
+
+        // Strip the last part of the number, if it is a letter
+        String numberNoLetter = this.mNumber;
+        if (Character.isAlphabetic(numberNoLetter.charAt(numberNoLetter.length() - 1))) {
+            numberNoLetter = numberNoLetter.substring(0, numberNoLetter.length() - 1);
+        }
+
+        String code = this.mScryfallSetCode.toLowerCase();
+
+        String urlStr = "https://api.scryfall.com/cards/" + code + "/" + numberNoLetter + "?format=image&version=normal&lang=" + lang;
+        if (this.mNumber.endsWith("b")) {
+            urlStr += "&face=back";
+        }
+        return new URL(urlStr);
     }
 
     /**
@@ -747,7 +746,8 @@ public class MtgCard extends Card {
      * @throws MalformedURLException If we screw up building the URL
      */
     private URL getGathererImageUrl() throws MalformedURLException {
-        return new URL("http://gatherer.wizards.com/Handlers/Image.ashx?multiverseid=" + mMultiverseId + "&type=card");
+        // Gatherer doesn't use HTTPS as of 1/6/2019
+        return new URL("https://gatherer.wizards.com/Handlers/Image.ashx?multiverseid=" + mMultiverseId + "&type=card");
     }
 
     public String getSetName() {

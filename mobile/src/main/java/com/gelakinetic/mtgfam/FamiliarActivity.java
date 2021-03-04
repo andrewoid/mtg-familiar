@@ -32,6 +32,7 @@ import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.content.res.TypedArray;
 import android.database.Cursor;
+import android.database.CursorIndexOutOfBoundsException;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
 import android.graphics.PorterDuff;
@@ -43,21 +44,9 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Parcel;
+import android.os.Parcelable;
 import android.preference.PreferenceManager;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v4.app.DialogFragment;
-import android.support.v4.app.Fragment;
-import android.support.v4.app.FragmentManager;
-import android.support.v4.app.FragmentTransaction;
-import android.support.v4.content.ContextCompat;
-import android.support.v4.view.GravityCompat;
-import android.support.v4.widget.DrawerLayout;
-import android.support.v7.app.ActionBar;
-import android.support.v7.app.ActionBarDrawerToggle;
-import android.support.v7.app.AppCompatActivity;
-import android.support.v7.app.AppCompatDelegate;
-import android.support.v7.widget.Toolbar;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.KeyEvent;
@@ -70,6 +59,21 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.ActionBar;
+import androidx.appcompat.app.ActionBarDrawerToggle;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatDelegate;
+import androidx.appcompat.widget.Toolbar;
+import androidx.core.content.ContextCompat;
+import androidx.core.view.GravityCompat;
+import androidx.drawerlayout.widget.DrawerLayout;
+import androidx.fragment.app.DialogFragment;
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentManager;
+import androidx.fragment.app.FragmentTransaction;
 
 import com.gelakinetic.mtgfam.fragments.CardViewFragment;
 import com.gelakinetic.mtgfam.fragments.CardViewPagerFragment;
@@ -84,7 +88,6 @@ import com.gelakinetic.mtgfam.fragments.LifeCounterFragment;
 import com.gelakinetic.mtgfam.fragments.ManaPoolFragment;
 import com.gelakinetic.mtgfam.fragments.MoJhoStoFragment;
 import com.gelakinetic.mtgfam.fragments.PrefsFragment;
-import com.gelakinetic.mtgfam.fragments.ProfileFragment;
 import com.gelakinetic.mtgfam.fragments.ResultListFragment;
 import com.gelakinetic.mtgfam.fragments.RoundTimerFragment;
 import com.gelakinetic.mtgfam.fragments.RulesFragment;
@@ -93,6 +96,7 @@ import com.gelakinetic.mtgfam.fragments.TradeFragment;
 import com.gelakinetic.mtgfam.fragments.WishlistFragment;
 import com.gelakinetic.mtgfam.fragments.dialogs.FamiliarActivityDialogFragment;
 import com.gelakinetic.mtgfam.fragments.dialogs.FamiliarDialogFragment;
+import com.gelakinetic.mtgfam.helpers.FamiliarLogger;
 import com.gelakinetic.mtgfam.helpers.MTGFamiliarAppWidgetProvider;
 import com.gelakinetic.mtgfam.helpers.PreferenceAdapter;
 import com.gelakinetic.mtgfam.helpers.SearchCriteria;
@@ -105,8 +109,6 @@ import com.gelakinetic.mtgfam.helpers.database.FamiliarDbHandle;
 import com.gelakinetic.mtgfam.helpers.tcgp.MarketPriceFetcher;
 import com.gelakinetic.mtgfam.helpers.updaters.DbUpdaterService;
 
-import org.jetbrains.annotations.NotNull;
-
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -115,8 +117,8 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.Collections;
 import java.util.Locale;
+import java.util.Objects;
 
 import fr.castorflex.android.smoothprogressbar.SmoothProgressBar;
 import fr.castorflex.android.smoothprogressbar.SmoothProgressDrawable;
@@ -139,7 +141,6 @@ public class FamiliarActivity extends AppCompatActivity {
     public static final String ACTION_RULES = "android.intent.action.RULES";
     public static final String ACTION_JUDGE = "android.intent.action.JUDGE";
     public static final String ACTION_MOJHOSTO = "android.intent.action.MOJHOSTO";
-    public static final String ACTION_PROFILE = "android.intent.action.PROFILE";
     public static final String ACTION_DECKLIST = "android.intent.action.DECKLIST";
 
     /* Used to request permissions */
@@ -150,11 +151,11 @@ public class FamiliarActivity extends AppCompatActivity {
     /* Constants used for saving state */
     private static final String CURRENT_FRAG = "CURRENT_FRAG";
     private static final String IS_REFRESHING = "IS_REFRESHING";
-    /* PayPal URL */
-    @SuppressWarnings("SpellCheckingInspection")
-    public static final String PAYPAL_URL = "https://www.paypal.com/cgi-bin/webscr?cmd=_donations" +
-            "&business=SZK4TAH2XBZNC&lc=US&item_name=MTG%20Familiar&currency_code=USD" +
-            "&bn=PP%2dDonationsBF%3abtn_donate_LG%2egif%3aNonHosted";
+    //    /* PayPal URL */
+//    @SuppressWarnings("SpellCheckingInspection")
+//    public static final String PAYPAL_URL = "https://www.paypal.com/cgi-bin/webscr?cmd=_donations" +
+//            "&business=SZK4TAH2XBZNC&lc=US&item_name=MTG%20Familiar&currency_code=USD" +
+//            "&bn=PP%2dDonationsBF%3abtn_donate_LG%2egif%3aNonHosted";
     /* Timer to determine user inactivity for screen dimming in the life counter */
     private static final long INACTIVITY_MS = 30000;
     /* Spice setup */
@@ -173,11 +174,10 @@ public class FamiliarActivity extends AppCompatActivity {
             new DrawerEntry(R.string.main_rules, R.attr.ic_drawer_rules, false, new Class[]{RulesFragment.class}),
             new DrawerEntry(R.string.main_judges_corner, R.attr.ic_drawer_judge, false, new Class[]{JudgesCornerFragment.class, DeckCounterFragment.class, HtmlDocFragment.class}),
             new DrawerEntry(R.string.main_mojhosto, R.attr.ic_drawer_mojhosto, false, new Class[]{MoJhoStoFragment.class}),
-            new DrawerEntry(R.string.main_profile, R.attr.ic_drawer_profile, false, new Class[]{ProfileFragment.class}),
             new DrawerEntry(0, 0, true, null),
             new DrawerEntry(R.string.main_settings_title, R.attr.ic_drawer_settings, false, null),
             new DrawerEntry(R.string.main_force_update_title, R.attr.ic_drawer_download, false, null),
-            new DrawerEntry(R.string.main_donate_title, R.attr.ic_drawer_good, false, null),
+//            new DrawerEntry(R.string.main_donate_title, R.attr.ic_drawer_good, false, null),
             new DrawerEntry(R.string.main_about, R.attr.ic_drawer_about, false, null),
             new DrawerEntry(R.string.main_whats_new_title, R.attr.ic_drawer_help, false, null),
             new DrawerEntry(R.string.main_export_data_title, R.attr.ic_drawer_save, false, null),
@@ -197,7 +197,7 @@ public class FamiliarActivity extends AppCompatActivity {
             assert AppWidgetManager.getInstance(getApplication()) != null;
             AppWidgetManager appWidgetManager = AppWidgetManager.getInstance(getApplication());
             assert appWidgetManager != null;
-            int ids[] = appWidgetManager.getAppWidgetIds(
+            int[] ids = appWidgetManager.getAppWidgetIds(
                     new ComponentName(getApplication(), MTGFamiliarAppWidgetProvider.class));
             intent.putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids);
             sendBroadcast(intent);
@@ -454,6 +454,10 @@ public class FamiliarActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Save this for static access by loggers
+        FamiliarLogger.initLogger(this);
+
         PrefsFragment.checkOverrideSystemLanguage(this);
 
         /* Figure out what theme the app is currently in, and change it if necessary */
@@ -474,7 +478,7 @@ public class FamiliarActivity extends AppCompatActivity {
         }
 
         /* Set the system bar color programatically, for lollipop+ */
-        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             getWindow().setStatusBarColor(ContextCompat.getColor(this, getResourceIdFromAttr(R.attr.colorPrimaryDark_attr)));
         }
 
@@ -543,29 +547,33 @@ public class FamiliarActivity extends AppCompatActivity {
         mDrawerList.setAdapter(mPagesAdapter);
         mDrawerList.setOnItemLongClickListener((adapterView, view, i, l) -> {
             boolean shouldCloseDrawer = false;
-            switch (mPageEntries[i].mNameResource) {
-                case R.string.main_force_update_title: {
-                    if (getNetworkState(FamiliarActivity.this, true) != -1) {
-                        FamiliarDbHandle handle = new FamiliarDbHandle();
-                        try {
-                            SQLiteDatabase database = DatabaseManager.openDatabase(FamiliarActivity.this, true, handle);
-                            CardDbAdapter.dropCreateDB(database);
-                            PreferenceAdapter.setLastLegalityUpdate(FamiliarActivity.this, 0);
-                            PreferenceAdapter.setLastIPGUpdate(FamiliarActivity.this, 0);
-                            PreferenceAdapter.setLastMTRUpdate(FamiliarActivity.this, 0);
-                            PreferenceAdapter.setLastJARUpdate(FamiliarActivity.this, 0);
-                            PreferenceAdapter.setLastRulesUpdate(FamiliarActivity.this, 0);
-                            PreferenceAdapter.setLegalityTimestamp(FamiliarActivity.this, 0);
+            if (mPageEntries[i].mNameResource == R.string.main_about) {
+                showDialogFragment(FamiliarActivityDialogFragment.DIALOG_LOGGING);
+                shouldCloseDrawer = true;
+            } else if (mPageEntries[i].mNameResource == R.string.main_force_update_title) {
+                if (getNetworkState(FamiliarActivity.this, true) != -1) {
+                    FamiliarDbHandle handle = new FamiliarDbHandle();
+                    try {
+                        SQLiteDatabase database = DatabaseManager.openDatabase(FamiliarActivity.this, true, handle);
+                        CardDbAdapter.dropCreateDB(database);
+                        PreferenceAdapter.setLastLegalityUpdate(FamiliarActivity.this, 0);
+                        PreferenceAdapter.setLastIPGUpdate(FamiliarActivity.this, 0);
+                        PreferenceAdapter.setLastMTRUpdate(FamiliarActivity.this, 0);
+                        PreferenceAdapter.setLastJARUpdate(FamiliarActivity.this, 0);
+                        PreferenceAdapter.setLastRulesUpdate(FamiliarActivity.this, 0);
+                        PreferenceAdapter.setLegalityTimestamp(FamiliarActivity.this, 0);
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(new Intent(FamiliarActivity.this, DbUpdaterService.class));
+                        } else {
                             startService(new Intent(FamiliarActivity.this, DbUpdaterService.class));
-                        } catch (SQLiteException | FamiliarDbException e) {
-                            e.printStackTrace();
-                        } finally {
-                            DatabaseManager.closeDatabase(FamiliarActivity.this, handle);
                         }
+                    } catch (SQLiteException | FamiliarDbException | IllegalStateException e) {
+                        e.printStackTrace();
+                    } finally {
+                        DatabaseManager.closeDatabase(FamiliarActivity.this, handle);
                     }
-                    shouldCloseDrawer = true;
-                    break;
                 }
+                shouldCloseDrawer = true;
             }
 
             mDrawerList.setItemChecked(mCurrentFrag, true);
@@ -580,68 +588,61 @@ public class FamiliarActivity extends AppCompatActivity {
                It's more precise than a delayed handler. Other options have to close the drawer
                themselves */
             boolean shouldCloseDrawer = false;
-            switch (mPageEntries[i].mNameResource) {
-                case R.string.main_extras:
-                case R.string.main_pages: {
-                    /* It's a header */
-                    break; /* don't close the drawer or change a selection */
-                }
-                case R.string.main_mana_pool:
-                case R.string.main_dice:
-                case R.string.main_trade:
-                case R.string.main_wishlist:
-                case R.string.main_decklist:
-                case R.string.main_timer:
-                case R.string.main_rules:
-                case R.string.main_judges_corner:
-                case R.string.main_mojhosto:
-                case R.string.main_card_search:
-                case R.string.main_life_counter:
-                case R.string.main_profile: {
-                    selectItem(mPageEntries[i].mNameResource, null, true, false);
-                    break;
-                }
-                case R.string.main_settings_title: {
-                    FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
-                    ft.addToBackStack(null);
-                    ft.replace(R.id.fragment_container, new PrefsFragment(), FamiliarActivity.FRAGMENT_TAG);
-                    ft.commitAllowingStateLoss();
-                    shouldCloseDrawer = true;
-                    break;
-                }
-                case R.string.main_force_update_title: {
-                    if (getNetworkState(FamiliarActivity.this, true) != -1) {
-                        PreferenceAdapter.setLastLegalityUpdate(FamiliarActivity.this, 0);
-                        startService(new Intent(FamiliarActivity.this, DbUpdaterService.class));
+            //noinspection StatementWithEmptyBody
+            if ((mPageEntries[i].mNameResource == R.string.main_extras) ||
+                    (mPageEntries[i].mNameResource == R.string.main_pages)) {
+                /* It's a header */
+                /* don't close the drawer or change a selection */
+            } else if ((mPageEntries[i].mNameResource == R.string.main_mana_pool)
+                    || (mPageEntries[i].mNameResource == R.string.main_dice)
+                    || (mPageEntries[i].mNameResource == R.string.main_trade)
+                    || (mPageEntries[i].mNameResource == R.string.main_wishlist)
+                    || (mPageEntries[i].mNameResource == R.string.main_decklist)
+                    || (mPageEntries[i].mNameResource == R.string.main_timer)
+                    || (mPageEntries[i].mNameResource == R.string.main_rules)
+                    || (mPageEntries[i].mNameResource == R.string.main_judges_corner)
+                    || (mPageEntries[i].mNameResource == R.string.main_mojhosto)
+                    || (mPageEntries[i].mNameResource == R.string.main_card_search)
+                    || (mPageEntries[i].mNameResource == R.string.main_life_counter)) {
+                selectItem(mPageEntries[i].mNameResource, null, true, false);
+            } else if (mPageEntries[i].mNameResource == R.string.main_settings_title) {
+                FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
+                ft.addToBackStack(null);
+                ft.replace(R.id.fragment_container, new PrefsFragment(), FamiliarActivity.FRAGMENT_TAG);
+                ft.commitAllowingStateLoss();
+                shouldCloseDrawer = true;
+            } else if (mPageEntries[i].mNameResource == R.string.main_force_update_title) {
+                if (getNetworkState(FamiliarActivity.this, true) != -1) {
+                    PreferenceAdapter.setLastLegalityUpdate(FamiliarActivity.this, 0);
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(new Intent(FamiliarActivity.this, DbUpdaterService.class));
+                        } else {
+                            startService(new Intent(FamiliarActivity.this, DbUpdaterService.class));
+                        }
+                    } catch (IllegalStateException e) {
+                        // Ignore it
                     }
-                    shouldCloseDrawer = true;
-                    break;
                 }
-                case R.string.main_donate_title: {
-                    showDialogFragment(FamiliarActivityDialogFragment.DIALOG_DONATE);
-                    shouldCloseDrawer = true;
-                    break;
-                }
-                case R.string.main_about: {
-                    showDialogFragment(FamiliarActivityDialogFragment.DIALOG_ABOUT);
-                    shouldCloseDrawer = true;
-                    break;
-                }
-                case R.string.main_whats_new_title: {
-                    showDialogFragment(FamiliarActivityDialogFragment.DIALOG_CHANGE_LOG);
-                    shouldCloseDrawer = true;
-                    break;
-                }
-                case R.string.main_export_data_title: {
-                    ZipUtils.exportData(FamiliarActivity.this);
-                    shouldCloseDrawer = true;
-                    break;
-                }
-                case R.string.main_import_data_title: {
-                    ZipUtils.importData(FamiliarActivity.this);
-                    shouldCloseDrawer = true;
-                    break;
-                }
+                shouldCloseDrawer = true;
+            }
+//                else if (mPageEntries[i].mNameResource == R.string.main_donate_title) {
+//                    showDialogFragment(FamiliarActivityDialogFragment.DIALOG_DONATE);
+//                    shouldCloseDrawer = true;
+//                    break;
+//                }
+            else if (mPageEntries[i].mNameResource == R.string.main_about) {
+                showDialogFragment(FamiliarActivityDialogFragment.DIALOG_ABOUT);
+                shouldCloseDrawer = true;
+            } else if (mPageEntries[i].mNameResource == R.string.main_whats_new_title) {
+                showDialogFragment(FamiliarActivityDialogFragment.DIALOG_CHANGE_LOG);
+                shouldCloseDrawer = true;
+            } else if (mPageEntries[i].mNameResource == R.string.main_export_data_title) {
+                ZipUtils.exportData(FamiliarActivity.this);
+                shouldCloseDrawer = true;
+            } else if (mPageEntries[i].mNameResource == R.string.main_import_data_title) {
+                ZipUtils.importData(FamiliarActivity.this);
+                shouldCloseDrawer = true;
             }
 
             mDrawerList.setItemChecked(mCurrentFrag, true);
@@ -723,14 +724,7 @@ public class FamiliarActivity extends AppCompatActivity {
                 if (pInfo.versionCode != lastVersion) {
 
                     // Show the changelog dialog, sometimes
-                    if (lastVersion != 0 &&
-                            !(lastVersion == 50 && pInfo.versionCode == 51) && // Don't show 50 -> 51, it was just a quick bugfix release
-                            !(lastVersion == 51 && pInfo.versionCode == 52) && // Don't show 51 -> 52, it was just a quick bugfix release
-                            !(lastVersion == 52 && pInfo.versionCode == 53) && // Don't show 52 -> 53, it was just a quick bugfix release
-                            !(lastVersion == 54 && pInfo.versionCode == 55) && // Don't show 54 -> 55, it was just a quick bugfix release
-                            !(lastVersion == 55 && pInfo.versionCode == 56) && // Don't show 55 -> 56, it was just a quick bugfix release
-                            !(lastVersion == 56 && pInfo.versionCode == 57)    // Don't show 56 -> 57, it was just a quick bugfix release
-                            ) {
+                    if (lastVersion != 0) {
                         showDialogFragment(FamiliarActivityDialogFragment.DIALOG_CHANGE_LOG);
                     }
 
@@ -761,7 +755,7 @@ public class FamiliarActivity extends AppCompatActivity {
                     if (lastVersion < 54) {
                         File cacheDir = getCacheDir();
                         if (null != cacheDir && cacheDir.exists()) {
-                            File listFiles[] = cacheDir.listFiles();
+                            File[] listFiles = cacheDir.listFiles();
                             if (null != listFiles) {
                                 for (File cachedFile : listFiles) {
                                     //noinspection ResultOfMethodCallIgnored
@@ -772,7 +766,7 @@ public class FamiliarActivity extends AppCompatActivity {
 
                         cacheDir = getExternalCacheDir();
                         if (null != cacheDir && cacheDir.exists()) {
-                            File listFiles[] = cacheDir.listFiles();
+                            File[] listFiles = cacheDir.listFiles();
                             if (null != listFiles) {
                                 for (File cachedFile : listFiles) {
                                     //noinspection ResultOfMethodCallIgnored
@@ -797,7 +791,15 @@ public class FamiliarActivity extends AppCompatActivity {
             int lastLegalityUpdate = PreferenceAdapter.getLastLegalityUpdate(this);
             /* days to ms */
             if (((curTime / 1000) - lastLegalityUpdate) > (updateFrequency * 24 * 60 * 60)) {
-                startService(new Intent(this, DbUpdaterService.class));
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        startForegroundService(new Intent(this, DbUpdaterService.class));
+                    } else {
+                        startService(new Intent(this, DbUpdaterService.class));
+                    }
+                } catch (IllegalStateException e) {
+                    // Ignore it
+                }
             }
         }
 
@@ -824,7 +826,8 @@ public class FamiliarActivity extends AppCompatActivity {
                 Bundle args = new Bundle();
                 SearchCriteria sc = new SearchCriteria();
                 sc.name = query;
-                args.putSerializable(SearchViewFragment.CRITERIA, sc);
+                args.putBoolean(SearchViewFragment.CRITERIA_FLAG, true);
+                PreferenceAdapter.setSearchCriteria(this, sc);
                 selectItem(R.string.main_card_search, args, false, true); /* Don't clear backstack, do force the intent */
 
                 break;
@@ -843,7 +846,7 @@ public class FamiliarActivity extends AppCompatActivity {
                 }
 
                 boolean shouldClearFragmentStack = true; /* Clear backstack for deep links */
-                if (data.getAuthority().toLowerCase().contains("gatherer.wizards")) {
+                if (data.getAuthority().toLowerCase().contains(".wizards")) {
                     Cursor cursor = null;
                     FamiliarDbHandle fromUrlHandle = new FamiliarDbHandle();
                     try {
@@ -861,12 +864,14 @@ public class FamiliarActivity extends AppCompatActivity {
                                 throw new Exception("Not Found");
                             }
                         } else if ((queryParam = data.getQueryParameter("name")) != null) {
-                            cursor = CardDbAdapter.fetchCardByName(queryParam,
-                                    Collections.singletonList(CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_ID), true, false, database);
-                            if (cursor.getCount() != 0) {
+                            String cardName = queryParam;
+                            if (queryParam.matches("\\+\\[.+\\]")) { // See #458
+                                cardName = queryParam.substring(2, queryParam.length() - 1);
+                            }
+                            long[] cardIds = CardDbAdapter.fetchIdsByLocalizedName(cardName, database);
+                            if (cardIds.length != 0) {
                                 isDeepLink = true;
-                                args.putLongArray(CardViewPagerFragment.CARD_ID_ARRAY,
-                                        new long[]{cursor.getInt(cursor.getColumnIndex(CardDbAdapter.KEY_ID))});
+                                args.putLongArray(CardViewPagerFragment.CARD_ID_ARRAY, cardIds);
                             }
                             if (args.size() == 0) {
                                 throw new Exception("Not Found");
@@ -888,7 +893,7 @@ public class FamiliarActivity extends AppCompatActivity {
                 } else if (data.getAuthority().contains("CardSearchProvider")) {
                     /* User clicked a card in the quick search autocomplete, jump right to it */
                     args.putLongArray(CardViewPagerFragment.CARD_ID_ARRAY,
-                            new long[]{Long.parseLong(data.getLastPathSegment())});
+                            new long[]{Long.parseLong(Objects.requireNonNull(data.getLastPathSegment()))});
                     shouldClearFragmentStack = false; /* Don't clear backstack for search intents */
                 } else {
                     /* User clicked a deep link, jump to the card(s) */
@@ -899,7 +904,7 @@ public class FamiliarActivity extends AppCompatActivity {
                     try {
                         SQLiteDatabase database = DatabaseManager.openDatabase(this, false, deepLinkHandle);
                         boolean screenLaunched = false;
-                        if (data.getScheme().toLowerCase().equals("card") &&
+                        if (Objects.requireNonNull(data.getScheme()).toLowerCase().equals("card") &&
                                 data.getAuthority().toLowerCase().equals("multiverseid")) {
                             if (data.getLastPathSegment() == null) {
                                 /* Home screen deep link */
@@ -915,8 +920,7 @@ public class FamiliarActivity extends AppCompatActivity {
                                     }
                                     cursor = CardDbAdapter.fetchCardByMultiverseId(Long.parseLong(data.getLastPathSegment()),
                                             new String[]{CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_ID}, database);
-                                } catch (NumberFormatException e) {
-                                    cursor = null;
+                                } catch (NumberFormatException ignored) {
                                 }
                             }
                         }
@@ -937,7 +941,7 @@ public class FamiliarActivity extends AppCompatActivity {
                             this.finish();
                             shouldSelectItem = false;
                         }
-                    } catch (SQLiteException | FamiliarDbException e) {
+                    } catch (SQLiteException | FamiliarDbException | CursorIndexOutOfBoundsException e) {
                         e.printStackTrace();
                     } finally {
                         if (null != cursor) {
@@ -982,16 +986,13 @@ public class FamiliarActivity extends AppCompatActivity {
             case ACTION_MOJHOSTO:
                 selectItem(R.string.main_mojhosto, null, true, false);
                 break;
-            case ACTION_PROFILE:
-                selectItem(R.string.main_profile, null, true, false);
-                break;
             case ACTION_DECKLIST:
                 selectItem(R.string.main_decklist, null, true, false);
                 break;
             case Intent.ACTION_MAIN:
                 /* App launched as regular, show the default fragment if there isn't one already */
-                if (getSupportFragmentManager().getFragments() == null ||
-                        getSupportFragmentManager().getFragments().isEmpty()) {
+                getSupportFragmentManager().getFragments();
+                if (getSupportFragmentManager().getFragments().isEmpty()) {
                     launchHomeScreen();
                 }
                 break;
@@ -1031,8 +1032,6 @@ public class FamiliarActivity extends AppCompatActivity {
             selectItem(R.string.main_judges_corner, null, true, false);
         } else if (defaultFragment.equals(this.getString(R.string.main_mojhosto))) {
             selectItem(R.string.main_mojhosto, null, true, false);
-        } else if (defaultFragment.equals(this.getString(R.string.main_profile))) {
-            selectItem(R.string.main_profile, null, true, false);
         } else if (defaultFragment.equals(this.getString(R.string.main_decklist))) {
             selectItem(R.string.main_decklist, null, true, false);
         } else {
@@ -1084,71 +1083,42 @@ public class FamiliarActivity extends AppCompatActivity {
         }
 
         mCurrentFrag = position;
-        Fragment newFrag;
+        FamiliarFragment newFrag = null;
         /* Pick the new fragment */
-        switch (resId) {
-            case R.string.main_card_search: {
-                /* If this is a quick search intent, launch either the card view or result list
-                 * directly */
-                if (args != null && args.containsKey(CardViewPagerFragment.CARD_ID_ARRAY)) {
-                    newFrag = new CardViewPagerFragment();
-                } else if (args != null && args.containsKey(SearchViewFragment.CRITERIA)) {
-                    newFrag = new ResultListFragment();
-                } else {
-                    newFrag = new SearchViewFragment();
-                }
-                break;
+        if (resId == R.string.main_card_search) {
+            /* If this is a quick search intent, launch either the card view or result list
+             * directly */
+            if (args != null && args.containsKey(CardViewPagerFragment.CARD_ID_ARRAY)) {
+                newFrag = new CardViewPagerFragment();
+            } else if (args != null && args.containsKey(SearchViewFragment.CRITERIA_FLAG)) {
+                newFrag = new ResultListFragment();
+            } else {
+                newFrag = new SearchViewFragment();
             }
-            case R.string.main_life_counter: {
-                newFrag = new LifeCounterFragment();
-                break;
-            }
-            case R.string.main_mana_pool: {
-                newFrag = new ManaPoolFragment();
-                break;
-            }
-            case R.string.main_dice: {
-                newFrag = new DiceFragment();
-                break;
-            }
-            case R.string.main_trade: {
-                newFrag = new TradeFragment();
-                break;
-            }
-            case R.string.main_wishlist: {
-                newFrag = new WishlistFragment();
-                break;
-            }
-            case R.string.main_decklist: {
-                newFrag = new DecklistFragment();
-                break;
-            }
-            case R.string.main_timer: {
-                newFrag = new RoundTimerFragment();
-                break;
-            }
-            case R.string.main_rules: {
-                newFrag = new RulesFragment();
-                break;
-            }
-            case R.string.main_judges_corner: {
-                newFrag = new JudgesCornerFragment();
-                break;
-            }
-            case R.string.main_mojhosto: {
-                newFrag = new MoJhoStoFragment();
-                break;
-            }
-            case R.string.main_profile: {
-                newFrag = new ProfileFragment();
-                break;
-            }
-            default:
-                return;
+        } else if (resId == R.string.main_life_counter) {
+            newFrag = new LifeCounterFragment();
+        } else if (resId == R.string.main_mana_pool) {
+            newFrag = new ManaPoolFragment();
+        } else if (resId == R.string.main_dice) {
+            newFrag = new DiceFragment();
+        } else if (resId == R.string.main_trade) {
+            newFrag = new TradeFragment();
+        } else if (resId == R.string.main_wishlist) {
+            newFrag = new WishlistFragment();
+        } else if (resId == R.string.main_decklist) {
+            newFrag = new DecklistFragment();
+        } else if (resId == R.string.main_timer) {
+            newFrag = new RoundTimerFragment();
+        } else if (resId == R.string.main_rules) {
+            newFrag = new RulesFragment();
+        } else if (resId == R.string.main_judges_corner) {
+            newFrag = new JudgesCornerFragment();
+        } else if (resId == R.string.main_mojhosto) {
+            newFrag = new MoJhoStoFragment();
         }
 
         try {
-            if (!forceSelect && ((Object) newFrag).getClass().equals(((Object) getSupportFragmentManager().findFragmentById(R.id.fragment_container)).getClass())) {
+            if (!forceSelect && null != newFrag && ((Object) newFrag).getClass().equals(((Object) Objects.requireNonNull(getSupportFragmentManager().findFragmentById(R.id.fragment_container))).getClass())) {
                 /* This is the same fragment, just close the menu */
                 mDrawerLayout.closeDrawer(mDrawerList);
                 return;
@@ -1164,7 +1134,7 @@ public class FamiliarActivity extends AppCompatActivity {
         FragmentManager fm = getSupportFragmentManager();
         FragmentTransaction ft;
         if (fm != null) {
-            if (shouldClearFragmentStack) {
+            if (shouldClearFragmentStack && !fm.isStateSaved()) {
                 /* Remove any current fragments on the back stack */
                 while (fm.getBackStackEntryCount() > 0) {
                     fm.popBackStackImmediate();
@@ -1227,7 +1197,7 @@ public class FamiliarActivity extends AppCompatActivity {
      * @param newConfig The new device configuration.
      */
     @Override
-    public void onConfigurationChanged(Configuration newConfig) {
+    public void onConfigurationChanged(@NonNull Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         /* Pass any configuration change to the drawer toggles */
         mDrawerToggle.onConfigurationChanged(newConfig);
@@ -1272,7 +1242,7 @@ public class FamiliarActivity extends AppCompatActivity {
         if (keyCode == KeyEvent.KEYCODE_SEARCH) {
             Fragment f = getSupportFragmentManager().findFragmentById(R.id.fragment_container);
             /* Check to see if the current fragment did anything with the search key */
-            return ((FamiliarFragment) f).onInterceptSearchKey() || super.onKeyDown(keyCode, event);
+            return ((FamiliarFragment) Objects.requireNonNull(f)).onInterceptSearchKey() || super.onKeyDown(keyCode, event);
         }
         /* Dinky workaround for LG phones: https://code.google.com/p/android/issues/detail?id=78154 */
         else if ((keyCode == KeyEvent.KEYCODE_MENU) /* &&
@@ -1297,7 +1267,7 @@ public class FamiliarActivity extends AppCompatActivity {
      * by the next receiver, return false.
      */
     @Override
-    public boolean onKeyUp(int keyCode, @NotNull KeyEvent event) {
+    public boolean onKeyUp(int keyCode, @NonNull KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_MENU) {
             Toolbar toolbar = findViewById(R.id.toolbar);
             if (toolbar != null) {
@@ -1334,9 +1304,9 @@ public class FamiliarActivity extends AppCompatActivity {
      * @return Return? How about an exception!
      */
     @Override
-    @NotNull
+    @NonNull
     public android.app.FragmentManager getFragmentManager() {
-        Log.e("Suggestion", "Use .getSupportFragmentManager()");
+        FamiliarActivity.DebugLog(Log.WARN, "Suggestion", "Use .getSupportFragmentManager()");
         return super.getFragmentManager();
     }
 
@@ -1407,6 +1377,7 @@ public class FamiliarActivity extends AppCompatActivity {
 
         assert getSupportActionBar() != null;
         getSupportActionBar().setDisplayShowTitleEnabled(true);
+        findViewById(R.id.toolbar).setOnClickListener(v -> selectItem(R.string.main_timer, null, false, false));
     }
 
     /**
@@ -1419,6 +1390,7 @@ public class FamiliarActivity extends AppCompatActivity {
         mRoundTimerUpdateHandler.removeCallbacks(timerUpdate);
         assert getSupportActionBar() != null;
         getSupportActionBar().setDisplayShowTitleEnabled(false);
+        findViewById(R.id.toolbar).setOnClickListener(null);
     }
 
     /**
@@ -1457,18 +1429,16 @@ public class FamiliarActivity extends AppCompatActivity {
      * @return True if the click was acted upon, false otherwise
      */
     @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
-            case android.R.id.home:
-                if (mDrawerLayout.isDrawerOpen(mDrawerList)) {
-                    mDrawerLayout.closeDrawer(mDrawerList);
-                } else {
-                    mDrawerLayout.openDrawer(mDrawerList);
-                }
-                return true;
-            default:
-                return super.onOptionsItemSelected(item);
+    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
+        if (item.getItemId() == android.R.id.home) {
+            if (mDrawerLayout.isDrawerOpen(mDrawerList)) {
+                mDrawerLayout.closeDrawer(mDrawerList);
+            } else {
+                mDrawerLayout.openDrawer(mDrawerList);
+            }
+            return true;
         }
+        return super.onOptionsItemSelected(item);
     }
 
     /**
@@ -1502,6 +1472,8 @@ public class FamiliarActivity extends AppCompatActivity {
         outState.putBoolean(IS_REFRESHING, mIsLoading);
         clearLoading();
         super.onSaveInstanceState(outState);
+
+        FamiliarActivity.logBundleSize("OSSI " + this.getClass().getName(), outState);
     }
 
     /**
@@ -1510,7 +1482,7 @@ public class FamiliarActivity extends AppCompatActivity {
      * @param savedInstanceState a Bundle which contains the saved state
      */
     @Override
-    protected void onRestoreInstanceState(@NotNull Bundle savedInstanceState) {
+    protected void onRestoreInstanceState(@NonNull Bundle savedInstanceState) {
         super.onRestoreInstanceState(savedInstanceState);
         if (savedInstanceState.containsKey(CURRENT_FRAG)) {
             mCurrentFrag = savedInstanceState.getInt(CURRENT_FRAG);
@@ -1528,20 +1500,24 @@ public class FamiliarActivity extends AppCompatActivity {
      * Show the indeterminate loading bar.
      */
     public void setLoading() {
-        if (!mIsLoading) {
-            mSmoothProgressBar.progressiveStart();
-            mIsLoading = true;
-        }
+        runOnUiThread(() -> {
+            if (!mIsLoading) {
+                mSmoothProgressBar.progressiveStart();
+                mIsLoading = true;
+            }
+        });
     }
 
     /**
      * Hide the indeterminate loading bar.
      */
     public void clearLoading() {
-        if (mIsLoading) {
-            mSmoothProgressBar.progressiveStop();
-            mIsLoading = false;
-        }
+        runOnUiThread(() -> {
+            if (mIsLoading) {
+                mSmoothProgressBar.progressiveStop();
+                mIsLoading = false;
+            }
+        });
     }
 
     /**
@@ -1553,7 +1529,6 @@ public class FamiliarActivity extends AppCompatActivity {
     public int getResourceIdFromAttr(int attr) {
         assert getTheme() != null;
         TypedArray ta = getTheme().obtainStyledAttributes(new int[]{attr});
-        assert ta != null;
         int resId = ta.getResourceId(0, 0);
         ta.recycle();
         return resId;
@@ -1622,7 +1597,7 @@ public class FamiliarActivity extends AppCompatActivity {
                 }
                 break;
             default:
-                getSupportFragmentManager().findFragmentById(R.id.fragment_container)
+                Objects.requireNonNull(getSupportFragmentManager().findFragmentById(R.id.fragment_container))
                         .onRequestPermissionsResult(requestCode, permissions, grantResults);
                 break;
         }
@@ -1631,14 +1606,14 @@ public class FamiliarActivity extends AppCompatActivity {
     /**
      * This nested class encapsulates the necessary information for an entry in the drawer menu.
      */
-    class DrawerEntry {
+    static class DrawerEntry {
         final int mNameResource;
         final int mIconAttr;
         final boolean mIsDivider;
         private final Class[] mFragClasses;
         TextView textView;
 
-        DrawerEntry(int nameResource, int iconResource, boolean isHeader, Class fragments[]) {
+        DrawerEntry(int nameResource, int iconResource, boolean isHeader, Class[] fragments) {
             mNameResource = nameResource;
             mIconAttr = iconResource;
             mIsDivider = isHeader;
@@ -1748,6 +1723,91 @@ public class FamiliarActivity extends AppCompatActivity {
                 mHighlightedDrawable = textView.getCompoundDrawables()[0];
                 mHighlightedDrawable.setColorFilter(ContextCompat.getColor(FamiliarActivity.this, getResourceIdFromAttr(R.attr.colorPrimary_attr)), PorterDuff.Mode.SRC_IN);
             }
+        }
+    }
+
+    /**
+     * Debug wrapper for Log.x
+     *
+     * @param level The Log level, VERBOSE, DEBUG, INFO, WARN, ERROR, or ASSERT
+     * @param tag   The tag for this message
+     * @param msg   The message to log
+     */
+    private static void DebugLog(int level, String tag, String msg) {
+        if (BuildConfig.DEBUG) {
+            switch (level) {
+                case Log.VERBOSE:
+                    Log.v(tag, msg);
+                    break;
+                case Log.DEBUG:
+                    Log.d(tag, msg);
+                    break;
+                case Log.INFO:
+                    Log.i(tag, msg);
+                    break;
+                case Log.WARN:
+                    Log.w(tag, msg);
+                    break;
+                case Log.ERROR:
+                    Log.e(tag, msg);
+                    break;
+                case Log.ASSERT:
+                    Log.wtf(tag, msg);
+                    break;
+            }
+        }
+    }
+
+    /**
+     * Helper to log a bundle's size
+     *
+     * @param name     A label for the log
+     * @param outState The bundle to log the size of
+     */
+    public static void logBundleSize(String name, Bundle outState) {
+        if (BuildConfig.DEBUG) {
+            Parcel parcel = Parcel.obtain();
+            parcel.writeBundle(outState);
+            int size = parcel.dataSize();
+            parcel.recycle();
+            FamiliarActivity.DebugLog(Log.VERBOSE, "logBundleSize", name + " saving " + size + " bytes");
+
+            StringBuilder toPrint = new StringBuilder();
+            toPrint.append("\r\n\r\n");
+            printBundleContents(toPrint, outState, 0);
+            FamiliarActivity.DebugLog(Log.VERBOSE, "logBundleContents", toPrint.toString());
+        }
+    }
+
+    private static void printBundleContents(StringBuilder toPrint, Bundle outState, int recursionLevel) {
+        try {
+            for (String key : outState.keySet()) {
+                for (int i = 0; i < recursionLevel; i++) {
+                    toPrint.append("  ");
+                }
+                toPrint.append(key).append(" :: ").append(Objects.requireNonNull(outState.get(key)).getClass().getName()).append("\r\n");
+                if (outState.get(key) instanceof Bundle) {
+                    printBundleContents(toPrint, (Bundle) outState.get(key), recursionLevel + 1);
+                }
+            }
+        } catch (NullPointerException e) {
+            // eat it
+        }
+    }
+
+    /**
+     * Helper to log a parcelable's size
+     *
+     * @param name     A label for the log
+     * @param outState THe parcelable to log the size of
+     */
+    public static void logBundleSize(String name, Parcelable outState) {
+        if (BuildConfig.DEBUG) {
+            Parcel parcel = Parcel.obtain();
+            parcel.writeParcelable(outState, 0);
+            int size = parcel.dataSize();
+            parcel.recycle();
+            FamiliarActivity.DebugLog(Log.VERBOSE, "logBundleSize", name + " saving " + size + " bytes");
         }
     }
 }

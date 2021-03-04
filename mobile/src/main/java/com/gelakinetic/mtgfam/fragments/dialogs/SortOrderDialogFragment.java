@@ -22,14 +22,15 @@ package com.gelakinetic.mtgfam.fragments.dialogs;
 import android.annotation.SuppressLint;
 import android.app.Dialog;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.v7.widget.LinearLayoutManager;
-import android.support.v7.widget.RecyclerView;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.CheckBox;
 import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.afollestad.materialdialogs.MaterialDialog;
 import com.gelakinetic.mtgfam.R;
@@ -37,11 +38,10 @@ import com.gelakinetic.mtgfam.helpers.database.CardDbAdapter;
 import com.woxthebox.draglistview.DragItemAdapter;
 import com.woxthebox.draglistview.DragListView;
 
-import org.jetbrains.annotations.NotNull;
-
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Class that creates dialogs for ResultListFragment
@@ -54,7 +54,7 @@ public class SortOrderDialogFragment extends FamiliarDialogFragment {
     public static final String KEY_PRICE = "key_price";
     public static final String KEY_ORDER = "key_order";
 
-    @NotNull
+    @NonNull
     @Override
     public Dialog onCreateDialog(Bundle savedInstanceState) {
         if (!canCreateDialog()) {
@@ -65,18 +65,21 @@ public class SortOrderDialogFragment extends FamiliarDialogFragment {
         setShowsDialog(true);
 
         /* Inflate the view */
-        @SuppressLint("InflateParams") View view = getActivity().getLayoutInflater().inflate(R.layout.sort_dialog_frag, null, false);
+        @SuppressLint("InflateParams") View view = Objects.requireNonNull(getActivity()).getLayoutInflater().inflate(R.layout.sort_dialog_frag, null, false);
         assert view != null;
 
         /* Create an arraylist of all the sorting options */
         final ArrayList<SortOption> options = new ArrayList<>(6);
-        String searchSortOrder = getArguments().getString(SAVED_SORT_ORDER);
+        String searchSortOrder = Objects.requireNonNull(getArguments()).getString(SAVED_SORT_ORDER);
 
         int idx = 0;
 
         if (searchSortOrder != null) {
             boolean orderAdded = false;
             boolean priceAdded = false;
+            boolean rarityAdded = false;
+            boolean setAdded = false;
+            boolean colorIdentityAdded = false;
             for (String option : searchSortOrder.split(",")) {
                 String key = option.split(" ")[0];
                 boolean ascending = option.split(" ")[1].equalsIgnoreCase(SQL_ASC);
@@ -109,6 +112,7 @@ public class SortOrderDialogFragment extends FamiliarDialogFragment {
                     }
                     case CardDbAdapter.KEY_SET: {
                         name = getResources().getString(R.string.search_set);
+                        setAdded = true;
                         break;
                     }
                     case KEY_PRICE: {
@@ -121,6 +125,16 @@ public class SortOrderDialogFragment extends FamiliarDialogFragment {
                         orderAdded = true;
                         break;
                     }
+                    case CardDbAdapter.KEY_RARITY: {
+                        name = getResources().getString(R.string.search_rarity);
+                        rarityAdded = true;
+                        break;
+                    }
+                    case CardDbAdapter.KEY_COLOR_IDENTITY: {
+                        name = getResources().getString(R.string.search_color_identity_title);
+                        colorIdentityAdded = true;
+                        break;
+                    }
                 }
                 options.add(new SortOption(name, ascending, key, idx++));
             }
@@ -130,7 +144,22 @@ public class SortOrderDialogFragment extends FamiliarDialogFragment {
              */
             if (priceAdded && !orderAdded) {
                 options.add(new SortOption(getResources().getString(R.string.wishlist_type_order),
-                        false, KEY_ORDER, idx));
+                        false, KEY_ORDER, idx++));
+            }
+
+            if (!rarityAdded) {
+                options.add(new SortOption(getResources().getString(R.string.search_rarity),
+                        false, CardDbAdapter.KEY_RARITY, idx++));
+            }
+
+            if (!setAdded) {
+                options.add(new SortOption(getString(R.string.search_set),
+                        false, CardDbAdapter.KEY_SET, idx++));
+            }
+
+            if (!colorIdentityAdded) {
+                options.add(new SortOption(getString(R.string.search_color_identity_title),
+                        false, CardDbAdapter.KEY_COLOR_IDENTITY, idx++));
             }
         }
 
@@ -171,7 +200,7 @@ public class SortOrderDialogFragment extends FamiliarDialogFragment {
         return adb.build();
     }
 
-    private class sortItemAdapter extends DragItemAdapter<SortOption, sortItemAdapter.sortItemViewHolder> {
+    private static class sortItemAdapter extends DragItemAdapter<SortOption, sortItemAdapter.sortItemViewHolder> {
 
         /**
          * Constructor. It sets the item list
@@ -237,7 +266,7 @@ public class SortOrderDialogFragment extends FamiliarDialogFragment {
         /**
          * This is a subclass for each view
          */
-        class sortItemViewHolder extends DragItemAdapter.ViewHolder {
+        static class sortItemViewHolder extends DragItemAdapter.ViewHolder {
 
             final CheckBox mCheckbox;
             final TextView mText;

@@ -29,17 +29,23 @@ import android.widget.TextView;
 
 import com.gelakinetic.mtgfam.R;
 
+import java.util.Objects;
+
 public class CompletionView extends ATokenTextView {
 
     public CompletionView(Context context, AttributeSet attrs) {
         super(context, attrs);
-        this.allowDuplicates(false);
+        mAllowDuplicates = false;
+        this.preventFreeFormText(true);
+        this.setTokenClickStyle(TokenClickStyle.Delete);
+        this.performBestGuess(true);
+        this.allowCollapse(true);
     }
 
     @Override
     protected View getViewForObject(String set) {
         LayoutInflater l = (LayoutInflater) getContext().getSystemService(Activity.LAYOUT_INFLATER_SERVICE);
-        TextView view = (TextView) l.inflate(R.layout.set_token, (ViewGroup) getParent(), false);
+        TextView view = (TextView) Objects.requireNonNull(l).inflate(R.layout.set_token, (ViewGroup) getParent(), false);
         view.setText(set);
 
         return view;

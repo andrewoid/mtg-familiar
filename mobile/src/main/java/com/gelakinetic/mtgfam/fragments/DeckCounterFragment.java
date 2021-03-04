@@ -20,7 +20,6 @@
 package com.gelakinetic.mtgfam.fragments;
 
 import android.os.Bundle;
-import android.support.annotation.NonNull;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -30,9 +29,12 @@ import android.widget.TextSwitcher;
 import android.widget.TextView;
 import android.widget.ViewSwitcher.ViewFactory;
 
+import androidx.annotation.NonNull;
+
 import com.gelakinetic.mtgfam.R;
 
 import java.util.ArrayList;
+import java.util.Objects;
 
 /**
  * This class helps judges tally deck counts quickly
@@ -83,7 +85,7 @@ public class DeckCounterFragment extends FamiliarFragment implements ViewFactory
         /* Restore any state, if available */
         if (savedInstanceState != null) {
             mDeckCount = savedInstanceState.getInt(DECK_COUNT_KEY);
-            mDeckCountSequence = StringToArray(savedInstanceState.getString(SEQUENCE_KEY));
+            mDeckCountSequence = StringToArray(Objects.requireNonNull(savedInstanceState.getString(SEQUENCE_KEY)));
         } else {
             mDeckCount = 0;
             mDeckCountSequence = new ArrayList<>();
@@ -159,7 +161,7 @@ public class DeckCounterFragment extends FamiliarFragment implements ViewFactory
      * @return An ArrayList built from the String
      */
     private ArrayList<Integer> StringToArray(String string) {
-        String parts[] = string.split(",");
+        String[] parts = string.split(",");
         ArrayList<Integer> list = new ArrayList<>(parts.length - 1);
         for (String part : parts) {
             try {

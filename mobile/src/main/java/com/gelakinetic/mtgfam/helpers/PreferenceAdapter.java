@@ -24,17 +24,23 @@ import android.content.SharedPreferences;
 import android.content.SharedPreferences.Editor;
 import android.media.RingtoneManager;
 import android.preference.PreferenceManager;
-import android.support.annotation.DrawableRes;
-import android.support.annotation.Nullable;
+
+import androidx.annotation.DrawableRes;
+import androidx.annotation.Nullable;
+import androidx.collection.LongSparseArray;
 
 import com.gelakinetic.mtgfam.R;
 import com.gelakinetic.mtgfam.fragments.dialogs.SortOrderDialogFragment;
 import com.gelakinetic.mtgfam.helpers.database.CardDbAdapter;
 import com.gelakinetic.mtgfam.helpers.tcgp.MarketPriceInfo;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 
+import java.lang.reflect.Type;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -186,6 +192,42 @@ public class PreferenceAdapter {
         edit.apply();
     }
 
+    /* Last DMTR update */
+    public static synchronized long getLastDMTRUpdate(@Nullable Context context) {
+        if (null == context) {
+            return 0;
+        }
+        return PreferenceManager.getDefaultSharedPreferences(context).getLong(context.getString(R.string.key_lastDMTRUpdate), 0);
+    }
+
+    public static synchronized void setLastDMTRUpdate(@Nullable Context context, long lastDMTRUpdate) {
+        if (null == context) {
+            return;
+        }
+
+        Editor edit = PreferenceManager.getDefaultSharedPreferences(context).edit();
+        edit.putLong(context.getString(R.string.key_lastDMTRUpdate), lastDMTRUpdate);
+        edit.apply();
+    }
+
+    /* Last DIPG update */
+    public static synchronized long getLastDIPGUpdate(@Nullable Context context) {
+        if (null == context) {
+            return 0;
+        }
+        return PreferenceManager.getDefaultSharedPreferences(context).getLong(context.getString(R.string.key_lastDIPGUpdate), 0);
+    }
+
+    public static synchronized void setLastDIPGUpdate(@Nullable Context context, long lastDIPGUpdate) {
+        if (null == context) {
+            return;
+        }
+
+        Editor edit = PreferenceManager.getDefaultSharedPreferences(context).edit();
+        edit.putLong(context.getString(R.string.key_lastDIPGUpdate), lastDIPGUpdate);
+        edit.apply();
+    }
+    
     /* TTS show dialog */
     public static synchronized boolean getTtsShowDialog(@Nullable Context context) {
         if (null == context) {
@@ -510,7 +552,7 @@ public class PreferenceAdapter {
             return MarketPriceInfo.PriceType.MARKET;
         }
         return MarketPriceInfo.PriceType.fromOrdinal(Integer.parseInt(
-                PreferenceManager.getDefaultSharedPreferences(context).getString(context.getString(R.string.key_tradePrice), "3")));
+                Objects.requireNonNull(PreferenceManager.getDefaultSharedPreferences(context).getString(context.getString(R.string.key_tradePrice), "3"))));
     }
 
     public static synchronized void setTradePrice(@Nullable Context context, MarketPriceInfo.PriceType tradePrice) {
@@ -529,7 +571,7 @@ public class PreferenceAdapter {
             return MarketPriceInfo.PriceType.MARKET;
         }
         return MarketPriceInfo.PriceType.fromOrdinal(Integer.parseInt(
-                PreferenceManager.getDefaultSharedPreferences(context).getString(context.getString(R.string.key_wishlistPrice), "3")));
+                Objects.requireNonNull(PreferenceManager.getDefaultSharedPreferences(context).getString(context.getString(R.string.key_wishlistPrice), "3"))));
     }
 
     public static synchronized void setWishlistPrice(@Nullable Context context, MarketPriceInfo.PriceType wishlistPrice) {
@@ -611,7 +653,7 @@ edit.putString(context.getString(R.string.key_lastUpdate), lastUpdate);
         if (null == context) {
             return -1;
         }
-        Long endTime = PreferenceManager.getDefaultSharedPreferences(context).getLong(context.getString(R.string.key_currentRoundTimer), -1);
+        long endTime = PreferenceManager.getDefaultSharedPreferences(context).getLong(context.getString(R.string.key_currentRoundTimer), -1);
         /* If the timer has expired, set it as -1 */
         if (endTime < System.currentTimeMillis()) {
             endTime = -1L;
@@ -674,7 +716,7 @@ edit.putString(context.getString(R.string.key_lastUpdate), lastUpdate);
             return "asd";
         }
         String theme = PreferenceManager.getDefaultSharedPreferences(context).getString(context.getString(R.string.key_theme), "asd");
-        if (theme.equals("asd")) {
+        if (Objects.requireNonNull(theme).equals("asd")) {
             theme = context.getResources().getString(R.string.pref_theme_light);
             setTheme(context, theme);
         }
@@ -908,7 +950,7 @@ edit.putString(context.getString(R.string.key_lastUpdate), lastUpdate);
             return MarketPriceInfo.PriceType.MARKET;
         }
         return MarketPriceInfo.PriceType.fromOrdinal(Integer.parseInt(
-                PreferenceManager.getDefaultSharedPreferences(context).getString(context.getString(R.string.key_deckPrice), "3")));
+                Objects.requireNonNull(PreferenceManager.getDefaultSharedPreferences(context).getString(context.getString(R.string.key_deckPrice), "3"))));
     }
 
     public static synchronized void setDeckPrice(@Nullable Context context, MarketPriceInfo.PriceType tradePrice) {
@@ -992,4 +1034,107 @@ edit.putString(context.getString(R.string.key_lastUpdate), lastUpdate);
         edit.apply();
     }
 
+    public static void setSearchViewCriteria(@Nullable Context context, SearchCriteria searchCriteria) {
+        if (null == context) {
+            return;
+        }
+        saveCriteria(context, searchCriteria, context.getString(R.string.key_SearchCriteriaPerm));
+    }
+
+    public static SearchCriteria getSearchViewCriteria(@Nullable Context context) {
+        if (null == context) {
+            return new SearchCriteria();
+        }
+        return LoadCriteria(context, context.getString(R.string.key_SearchCriteriaPerm));
+    }
+
+    public static void setSearchCriteria(@Nullable Context context, SearchCriteria searchCriteria) {
+        if (null == context) {
+            return;
+        }
+        saveCriteria(context, searchCriteria, context.getString(R.string.key_SearchCriteria));
+    }
+
+    public static SearchCriteria getSearchCriteria(@Nullable Context context) {
+        if (null == context) {
+            return new SearchCriteria();
+        }
+        return LoadCriteria(context, context.getString(R.string.key_SearchCriteria));
+    }
+
+    private static void saveCriteria(@Nullable Context context, SearchCriteria searchCriteria, String key) {
+        if (null == context) {
+            return;
+        }
+
+        Editor edit = PreferenceManager.getDefaultSharedPreferences(context).edit();
+        edit.putString(key, searchCriteria.toJson());
+        edit.apply();
+    }
+
+    private static SearchCriteria LoadCriteria(@Nullable Context context, String key) {
+        if (null == context) {
+            return new SearchCriteria();
+        }
+
+        return (new Gson()).fromJson(
+                PreferenceManager.getDefaultSharedPreferences(context).getString(key, "{}"),
+                SearchCriteria.class);
+    }
+
+    public static void setGroups(@Nullable Context context, LongSparseArray<String> groups) {
+        if (null == context) {
+            return;
+        }
+
+        Editor edit = PreferenceManager.getDefaultSharedPreferences(context).edit();
+        edit.putString(context.getString(R.string.key_tcgpGroups), (new Gson()).toJson(groups));
+        edit.apply();
+    }
+
+    public static LongSparseArray<String> getGroups(@Nullable Context context) {
+        if (null == context) {
+            return new LongSparseArray<>();
+        }
+
+        Type type = new TypeToken<LongSparseArray<String>>() {
+        }.getType();
+        return (new Gson()).fromJson(
+                PreferenceManager.getDefaultSharedPreferences(context).getString(context.getString(R.string.key_tcgpGroups), "{}"),
+                type);
+    }
+
+    /* Persist search options */
+    public static synchronized boolean getPersistSearchOptions(@Nullable Context context) {
+        if (null == context) {
+            return true;
+        }
+        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(context.getString(R.string.key_persistSearch), true);
+    }
+
+    /* Persist search options */
+    public static synchronized boolean getHideOnlineOnly(@Nullable Context context) {
+        if (null == context) {
+            return true;
+        }
+        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(context.getString(R.string.key_hideOnlineCards), false);
+    }
+
+    /* 15-minute warning pref */
+    public static synchronized boolean getLoggingPref(@Nullable Context context) {
+        if (null == context) {
+            return false;
+        }
+        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(context.getString(R.string.key_loggingPref), false);
+    }
+
+    public static synchronized void setLoggingPref(@Nullable Context context, boolean loggingPref) {
+        if (null == context) {
+            return;
+        }
+
+        Editor edit = PreferenceManager.getDefaultSharedPreferences(context).edit();
+        edit.putBoolean(context.getString(R.string.key_loggingPref), loggingPref);
+        edit.apply();
+    }
 }

@@ -33,6 +33,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.util.Calendar;
 
@@ -45,15 +46,23 @@ class MTRIPGParser {
     public static final int MODE_IPG = 0;
     public static final int MODE_MTR = 1;
     public static final int MODE_JAR = 2;
+    public static final int MODE_DIPG = 3;
+    public static final int MODE_DMTR = 4;
     private static final String MTR_SOURCE =
-            "https://raw.githubusercontent.com/AEFeinstein/GathererScraper/master/rules/MagicTournamentRules-light.html";
+            "https://github.com/AEFeinstein/Mtgjson2Familiar/raw/main/rules/mtr.html";
     private static final String IPG_SOURCE =
-            "https://raw.githubusercontent.com/AEFeinstein/GathererScraper/master/rules/InfractionProcedureGuide-light.html";
+            "https://github.com/AEFeinstein/Mtgjson2Familiar/raw/main/rules/ipg.html";
     private static final String JAR_SOURCE =
-            "https://raw.githubusercontent.com/AEFeinstein/GathererScraper/master/rules/JudgingAtRegular-light.html";
+            "https://github.com/AEFeinstein/Mtgjson2Familiar/raw/main/rules/jar.html";
+    private static final String DMTR_SOURCE =
+            "https://github.com/AEFeinstein/Mtgjson2Familiar/raw/main/rules/dmtr.html";
+    private static final String DIPG_SOURCE =
+            "https://github.com/AEFeinstein/Mtgjson2Familiar/raw/main/rules/dipg.html";
     private static final String MTR_LOCAL_FILE = "MTR.html";
     private static final String IPG_LOCAL_FILE = "IPG.html";
     private static final String JAR_LOCAL_FILE = "JAR.html";
+    private static final String DMTR_LOCAL_FILE = "DMTR.html";
+    private static final String DIPG_LOCAL_FILE = "DIPG.html";
     private final Context mContext;
     String mPrettyDate;
 
@@ -87,6 +96,13 @@ class MTRIPGParser {
                 break;
             case MODE_JAR:
                 output = new File(mContext.getFilesDir(), JAR_LOCAL_FILE);
+                break;
+            case MODE_DIPG:
+                output = new File(mContext.getFilesDir(), DIPG_LOCAL_FILE);
+                break;
+            case MODE_DMTR:
+                output = new File(mContext.getFilesDir(), DMTR_LOCAL_FILE);
+                break;
         }
         try {
             if (output != null && !output.exists()) {
@@ -99,6 +115,12 @@ class MTRIPGParser {
                         break;
                     case MODE_JAR:
                         parseDocument(mode, mContext.getResources().openRawResource(R.raw.jar));
+                        break;
+                    case MODE_DIPG:
+                        parseDocument(mode, mContext.getResources().openRawResource(R.raw.dipg));
+                        break;
+                    case MODE_DMTR:
+                        parseDocument(mode, mContext.getResources().openRawResource(R.raw.dmtr));
                         break;
                 }
             }
@@ -121,6 +143,12 @@ class MTRIPGParser {
                 case MODE_JAR:
                     urlString = JAR_SOURCE;
                     break;
+                case MODE_DIPG:
+                    urlString = DIPG_SOURCE;
+                    break;
+                case MODE_DMTR:
+                    urlString = DMTR_SOURCE;
+                    break;
                 default:
                     throw new FileNotFoundException("Invalid switch"); /* handled below */
             }
@@ -139,7 +167,7 @@ class MTRIPGParser {
 
     private boolean parseDocument(int mode, InputStream is) throws IOException {
         boolean updated = false;
-        BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+        BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
 
         String line = reader.readLine();
         String[] parts = line.split("-");
@@ -164,6 +192,14 @@ class MTRIPGParser {
                 shouldUpdate = documentDate != PreferenceAdapter.getLastJARUpdate(mContext);
                 break;
             }
+            case MODE_DIPG: {
+                shouldUpdate = documentDate != PreferenceAdapter.getLastDIPGUpdate(mContext);
+                break;
+            }
+            case MODE_DMTR: {
+                shouldUpdate = documentDate != PreferenceAdapter.getLastDMTRUpdate(mContext);
+                break;
+            }
             default: {
                 shouldUpdate = false;
             }
@@ -186,6 +222,12 @@ class MTRIPGParser {
                 case MODE_JAR:
                     output = new File(mContext.getFilesDir(), JAR_LOCAL_FILE);
                     break;
+                case MODE_DIPG:
+                    output = new File(mContext.getFilesDir(), DIPG_LOCAL_FILE);
+                    break;
+                case MODE_DMTR:
+                    output = new File(mContext.getFilesDir(), DMTR_LOCAL_FILE);
+                    break;
                 default:
                     throw new FileNotFoundException("Invalid switch"); /* handled below */
             }
@@ -204,6 +246,12 @@ class MTRIPGParser {
                     break;
                 case MODE_JAR:
                     PreferenceAdapter.setLastJARUpdate(mContext, documentDate);
+                    break;
+                case MODE_DIPG:
+                    PreferenceAdapter.setLastDIPGUpdate(mContext, documentDate);
+                    break;
+                case MODE_DMTR:
+                    PreferenceAdapter.setLastDMTRUpdate(mContext, documentDate);
                     break;
                 default:
                     throw new FileNotFoundException("Invalid switch"); /* handled below */

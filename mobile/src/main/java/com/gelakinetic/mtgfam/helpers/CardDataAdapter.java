@@ -19,16 +19,18 @@
 
 package com.gelakinetic.mtgfam.helpers;
 
-import android.support.annotation.CallSuper;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.design.widget.Snackbar;
-import android.support.v7.widget.RecyclerView;
 import android.view.View;
+
+import androidx.annotation.CallSuper;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.gelakinetic.mtgfam.R;
 import com.gelakinetic.mtgfam.fragments.FamiliarListFragment;
 import com.gelakinetic.mtgfam.fragments.TradeFragment;
+import com.google.android.material.snackbar.BaseTransientBottomBar;
+import com.google.android.material.snackbar.Snackbar;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -44,7 +46,7 @@ public abstract class CardDataAdapter<T extends MtgCard, VH extends CardDataView
 
     private final FamiliarListFragment mFragment;
 
-    private final List<T> items;
+    protected final List<T> items;
     private final ArrayList<T> undoBuffer;
 
     private boolean inSelectMode;
@@ -55,7 +57,7 @@ public abstract class CardDataAdapter<T extends MtgCard, VH extends CardDataView
      * @param values   The values which will back this adapter
      * @param fragment The fragment this adapter will be shown in
      */
-    protected CardDataAdapter(ArrayList<T> values, FamiliarListFragment fragment) {
+    protected CardDataAdapter(List<T> values, FamiliarListFragment fragment) {
         items = values;
         inSelectMode = false;
         undoBuffer = new ArrayList<>();
@@ -78,7 +80,9 @@ public abstract class CardDataAdapter<T extends MtgCard, VH extends CardDataView
             /* Sometimes an item will be selected after we exit select mode */
             setItemSelected(holder.itemView, position, false, false);
         } else {
-            setItemSelected(holder.itemView, position, items.get(position).isSelected(), false);
+            synchronized (items) {
+                setItemSelected(holder.itemView, position, items.get(position).isSelected(), false);
+            }
         }
     }
 
@@ -87,7 +91,9 @@ public abstract class CardDataAdapter<T extends MtgCard, VH extends CardDataView
      */
     @Override
     public int getItemCount() {
-        return items.size();
+        synchronized (items) {
+            return items.size();
+        }
     }
 
     /**
@@ -98,8 +104,10 @@ public abstract class CardDataAdapter<T extends MtgCard, VH extends CardDataView
      */
     @Nullable
     protected T getItem(int position) {
-        if (position < items.size()) {
-            return items.get(position);
+        synchronized (items) {
+            if (position < items.size()) {
+                return items.get(position);
+            }
         }
         return null;
     }
@@ -112,9 +120,11 @@ public abstract class CardDataAdapter<T extends MtgCard, VH extends CardDataView
      */
     void swipeRemoveItem(final int position) {
         // Remove the item from the list and add it to a temporary array
-        String removedName = items.get(position).getName();
-        undoBuffer.add(items.remove(position));
-
+        String removedName;
+        synchronized (items) {
+            removedName = items.get(position).getName();
+            undoBuffer.add(items.remove(position));
+        }
         onItemRemoved();
 
         SnackbarWrapper.makeAndShowText(mFragment.getFamiliarActivity(), mFragment.getString(R.string.cardlist_item_deleted) + " " + removedName,
@@ -145,14 +155,14 @@ public abstract class CardDataAdapter<T extends MtgCard, VH extends CardDataView
                     public void onDismissed(Snackbar transientBottomBar, int event) {
                         super.onDismissed(transientBottomBar, event);
                         switch (event) {
-                            case Snackbar.Callback.DISMISS_EVENT_MANUAL:
-                            case Snackbar.Callback.DISMISS_EVENT_SWIPE:
-                            case Snackbar.Callback.DISMISS_EVENT_TIMEOUT: {
+                            case BaseTransientBottomBar.BaseCallback.DISMISS_EVENT_SWIPE:
+                            case BaseTransientBottomBar.BaseCallback.DISMISS_EVENT_TIMEOUT: {
                                 finalizeDelete();
                                 break;
                             }
-                            case Snackbar.Callback.DISMISS_EVENT_ACTION:
-                            case Snackbar.Callback.DISMISS_EVENT_CONSECUTIVE: {
+                            case BaseTransientBottomBar.BaseCallback.DISMISS_EVENT_MANUAL:
+                            case BaseTransientBottomBar.BaseCallback.DISMISS_EVENT_ACTION:
+                            case BaseTransientBottomBar.BaseCallback.DISMISS_EVENT_CONSECUTIVE: {
                                 // Snackbar was dismissed by action click, handled above or
                                 // Hidden by a new snackbar, ignore it
                                 break;
@@ -223,9 +233,11 @@ public abstract class CardDataAdapter<T extends MtgCard, VH extends CardDataView
     public ArrayList<T> getSelectedItems() {
 
         ArrayList<T> selectedItemsLocal = new ArrayList<>();
-        for (T item : items) {
-            if (item.isSelected()) {
-                selectedItemsLocal.add(item);
+        synchronized (items) {
+            for (T item : items) {
+                if (item.isSelected()) {
+                    selectedItemsLocal.add(item);
+                }
             }
         }
         return selectedItemsLocal;
@@ -238,10 +250,12 @@ public abstract class CardDataAdapter<T extends MtgCard, VH extends CardDataView
      * the undo buffer in case the user wants them back before the timeout
      */
     public void deleteSelectedItemsWithUndo() {
-        for (int i = items.size() - 1; i >= 0; i--) {
-            if (items.get(i).isSelected()) {
-                undoBuffer.add(items.get(i));
-                items.remove(i);
+        synchronized (items) {
+            for (int i = items.size() - 1; i >= 0; i--) {
+                if (items.get(i).isSelected()) {
+                    undoBuffer.add(items.get(i));
+                    items.remove(i);
+                }
             }
         }
         this.onItemRemoved();
@@ -251,9 +265,10 @@ public abstract class CardDataAdapter<T extends MtgCard, VH extends CardDataView
      * Deselects all items
      */
     public void deselectAll() {
-
-        for (T item : items) {
-            item.setSelected(false);
+        synchronized (items) {
+            for (T item : items) {
+                item.setSelected(false);
+            }
         }
         setInSelectMode(false);
         notifyDataSetChanged();
@@ -271,10 +286,8 @@ public abstract class CardDataAdapter<T extends MtgCard, VH extends CardDataView
     void setItemSelected(View view, int position, boolean selected, boolean shouldNotify) {
         view.setSelected(selected);
         view.invalidate();
-        if (selected) {
-            items.get(position).setSelected(true);
-        } else {
-            items.get(position).setSelected(false);
+        synchronized (items) {
+            items.get(position).setSelected(selected);
         }
 
         // Notify of any changes
@@ -288,9 +301,11 @@ public abstract class CardDataAdapter<T extends MtgCard, VH extends CardDataView
      */
     public int getNumSelectedItems() {
         int numSelected = 0;
-        for (T item : items) {
-            if (item.isSelected()) {
-                numSelected++;
+        synchronized (items) {
+            for (T item : items) {
+                if (item.isSelected()) {
+                    numSelected++;
+                }
             }
         }
         return numSelected;
@@ -303,7 +318,9 @@ public abstract class CardDataAdapter<T extends MtgCard, VH extends CardDataView
     public void undoDelete() {
         // The user clicked Undo. Add the items back, then clear them from
         // the undo buffer
-        items.addAll(undoBuffer);
+        synchronized (items) {
+            items.addAll(undoBuffer);
+        }
         undoBuffer.clear();
         // Notify the adapter, this may have fragment specific code
         onItemReadded();

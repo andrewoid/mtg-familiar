@@ -20,10 +20,10 @@
 package com.gelakinetic.mtgfam.fragments;
 
 import android.database.Cursor;
+import android.database.CursorIndexOutOfBoundsException;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -31,6 +31,8 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Spinner;
+
+import androidx.annotation.NonNull;
 
 import com.gelakinetic.mtgfam.FamiliarActivity;
 import com.gelakinetic.mtgfam.R;
@@ -144,7 +146,7 @@ public class MoJhoStoFragment extends FamiliarFragment {
      * @param inflater The inflater to use to inflate the menu
      */
     @Override
-    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
+    public void onCreateOptionsMenu(@NonNull Menu menu, @NonNull MenuInflater inflater) {
         super.onCreateOptionsMenu(menu, inflater);
         inflater.inflate(R.menu.mojhosto_menu, menu);
     }
@@ -158,12 +160,11 @@ public class MoJhoStoFragment extends FamiliarFragment {
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         /* Handle item selection */
-        switch (item.getItemId()) {
-            case R.id.random_rules:
-                showDialog(MoJhoStoDialogFragment.DIALOG_RULES);
-                return true;
-            default:
-                return super.onOptionsItemSelected(item);
+        if (item.getItemId() == R.id.random_rules) {
+            showDialog(MoJhoStoDialogFragment.DIALOG_RULES);
+            return true;
+        } else {
+            return super.onOptionsItemSelected(item);
         }
     }
 
@@ -230,7 +231,7 @@ public class MoJhoStoFragment extends FamiliarFragment {
             args.putInt(CardViewPagerFragment.STARTING_CARD_POSITION, 0);
             CardViewPagerFragment cvpFrag = new CardViewPagerFragment();
             startNewFragment(cvpFrag, args);
-        } catch (SQLiteException | FamiliarDbException e) {
+        } catch (SQLiteException | FamiliarDbException | CursorIndexOutOfBoundsException e) {
             handleFamiliarDbException(true);
         } finally {
             if (null != permanents) {
@@ -260,7 +261,7 @@ public class MoJhoStoFragment extends FamiliarFragment {
                 throw new FamiliarDbException(new Exception("three spell failure"));
             }
             /* Get 3 random, distinct numbers */
-            int pos[] = new int[3];
+            int[] pos = new int[3];
             pos[0] = mRandom.nextInt(spells.getCount());
             pos[1] = mRandom.nextInt(spells.getCount());
             while (pos[0] == pos[1]) {
@@ -283,7 +284,7 @@ public class MoJhoStoFragment extends FamiliarFragment {
             /* add a fragment */
             ResultListFragment rlFrag = new ResultListFragment();
             startNewFragment(rlFrag, args);
-        } catch (SQLiteException | FamiliarDbException e) {
+        } catch (SQLiteException | FamiliarDbException | CursorIndexOutOfBoundsException e) {
             handleFamiliarDbException(true);
         } finally {
             if (null != spells) {

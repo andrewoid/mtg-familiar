@@ -22,23 +22,26 @@ package com.gelakinetic.mtgfam.fragments.dialogs;
 import android.annotation.SuppressLint;
 import android.app.Dialog;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.SimpleAdapter;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.afollestad.materialdialogs.MaterialDialog;
 import com.gelakinetic.mtgfam.R;
 import com.gelakinetic.mtgfam.fragments.DecklistFragment;
 import com.gelakinetic.mtgfam.helpers.CardHelpers;
 import com.gelakinetic.mtgfam.helpers.DecklistHelpers;
+import com.gelakinetic.mtgfam.helpers.PreferenceAdapter;
 import com.gelakinetic.mtgfam.helpers.SnackbarWrapper;
-
-import org.jetbrains.annotations.NotNull;
+import com.gelakinetic.mtgfam.helpers.tcgp.MarketPriceInfo;
 
 import java.io.File;
+import java.util.Objects;
 
 /**
  * Class that creates dialogs for DecklistFragment.
@@ -52,6 +55,8 @@ public class DecklistDialogFragment extends FamiliarDialogFragment {
     public static final int DIALOG_DELETE_DECK = 4;
     public static final int DIALOG_CONFIRMATION = 5;
     public static final int DIALOG_GET_LEGALITY = 6;
+    public static final int DIALOG_NEW_DECK = 7;
+    public static final int DIALOG_PRICE_SETTING = 8;
 
     public static final String NAME_KEY = "name";
     public static final String SIDE_KEY = "side";
@@ -68,7 +73,7 @@ public class DecklistDialogFragment extends FamiliarDialogFragment {
         }
     }
 
-    @NotNull
+    @NonNull
     @Override
     public Dialog onCreateDialog(Bundle savedInstanceState) {
         if (!canCreateDialog()) {
@@ -77,7 +82,7 @@ public class DecklistDialogFragment extends FamiliarDialogFragment {
         }
 
         setShowsDialog(true);
-        mDialogId = getArguments().getInt(ID_KEY);
+        mDialogId = Objects.requireNonNull(getArguments()).getInt(ID_KEY);
         final String cardName = getArguments().getString(NAME_KEY);
         final boolean isSideboard = getArguments().getBoolean(SIDE_KEY);
 
@@ -89,7 +94,7 @@ public class DecklistDialogFragment extends FamiliarDialogFragment {
             case DIALOG_UPDATE_CARD: {
                 Dialog dialog = CardHelpers.getDialog(
                         cardName,
-                        getParentDecklistFragment(),
+                        Objects.requireNonNull(getParentDecklistFragment()),
                         true,
                         isSideboard
                 );
@@ -101,9 +106,47 @@ public class DecklistDialogFragment extends FamiliarDialogFragment {
                 }
                 return dialog;
             }
+            case DIALOG_NEW_DECK: {
+                /* Inflate a view to type in the deck's name and show it in an AlertDialog */
+                @SuppressLint("InflateParams") View textEntryView = Objects.requireNonNull(getActivity()).getLayoutInflater()
+                        .inflate(R.layout.alert_dialog_text_entry, null, false);
+                assert textEntryView != null;
+                final EditText nameInput = textEntryView.findViewById(R.id.text_entry);
+                textEntryView.findViewById(R.id.clear_button).setVisibility(View.GONE);
+                Dialog dialog = new MaterialDialog.Builder(getActivity())
+                        .title(R.string.decklist_new)
+                        .customView(textEntryView, false)
+                        .positiveText(R.string.dialog_ok)
+                        .onPositive((dialog1, which) -> {
+                            if (nameInput.getText() == null) {
+                                getParentDecklistFragment().showErrorSnackbarNoName();
+                                return;
+                            }
+                            String deckName = nameInput.getText().toString();
+                            /* Don't save if there is not a name */
+                            if (deckName.length() == 0) {
+                                getParentDecklistFragment().showErrorSnackbarNoName();
+                                return;
+                            }
+                            // If the name is valid enough, save the current deck, then make the new one
+                            getParentDecklistFragment().saveCurrentDeck(false);
+                            getParentDecklistFragment().clearDeck(false);
+
+                            // And set the new name
+                            getParentDecklistFragment().mCurrentDeck = deckName;
+                            getParentDecklistFragment().mDeckName.setText(deckName);
+                            // And create the file
+                            getParentDecklistFragment().saveCurrentDeck(false);
+                        })
+                        .negativeText(R.string.dialog_cancel)
+                        .build();
+                Objects.requireNonNull(dialog.getWindow())
+                        .setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+                return dialog;
+            }
             case DIALOG_SAVE_DECK_AS: {
                 /* Inflate a view to type in the deck's name and show it in an AlertDialog */
-                @SuppressLint("InflateParams") View textEntryView = getActivity().getLayoutInflater()
+                @SuppressLint("InflateParams") View textEntryView = Objects.requireNonNull(getActivity()).getLayoutInflater()
                         .inflate(R.layout.alert_dialog_text_entry, null, false);
                 assert textEntryView != null;
                 final EditText nameInput = textEntryView.findViewById(R.id.text_entry);
@@ -118,25 +161,22 @@ public class DecklistDialogFragment extends FamiliarDialogFragment {
                         .onPositive((dialog1, which) -> {
 
                             if (nameInput.getText() == null) {
+                                getParentDecklistFragment().showErrorSnackbarNoName();
                                 return;
                             }
                             String deckName = nameInput.getText().toString();
                             /* Don't save if there is not a name */
-                            if (deckName.length() == 0 || deckName.equals("")) {
+                            if (deckName.length() == 0) {
+                                getParentDecklistFragment().showErrorSnackbarNoName();
                                 return;
                             }
-                            DecklistHelpers.WriteCompressedDecklist(
-                                    getActivity(),
-                                    getParentDecklistFragment().mCompressedDecklist,
-                                    deckName + DecklistFragment.DECK_EXTENSION
-                            );
                             getParentDecklistFragment().mCurrentDeck = deckName;
                             getParentDecklistFragment().mDeckName.setText(deckName);
-
+                            getParentDecklistFragment().saveCurrentDeck(true);
                         })
                         .negativeText(R.string.dialog_cancel)
                         .build();
-                dialog.getWindow()
+                Objects.requireNonNull(dialog.getWindow())
                         .setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
                 return dialog;
             }
@@ -151,19 +191,20 @@ public class DecklistDialogFragment extends FamiliarDialogFragment {
                     return DontShowDialog();
                 }
 
-                return new MaterialDialog.Builder(this.getActivity())
+                return new MaterialDialog.Builder(Objects.requireNonNull(this.getActivity()))
                         .title(R.string.decklist_select_dialog_title)
                         .negativeText(R.string.dialog_cancel)
                         .items((CharSequence[]) deckNames)
                         .itemsCallback((dialog, itemView, position, text) -> {
 
                             /* First save the current deck */
-                            DecklistHelpers.WriteCompressedDecklist(
-                                    getActivity(),
-                                    getParentDecklistFragment().mCompressedDecklist,
-                                    getParentDecklistFragment().mCurrentDeck + DecklistFragment.DECK_EXTENSION
-                            );
-
+                            synchronized (getParentDecklistFragment().mCompressedDecklist) {
+                                DecklistHelpers.WriteCompressedDecklist(
+                                        getActivity(),
+                                        getParentDecklistFragment().mCompressedDecklist,
+                                        getParentDecklistFragment().mCurrentDeck + DecklistFragment.DECK_EXTENSION
+                                );
+                            }
                             /* Then read the next one */
                             getParentDecklistFragment()
                                     .readAndCompressDecklist(null, deckNames[position]);
@@ -188,7 +229,7 @@ public class DecklistDialogFragment extends FamiliarDialogFragment {
                     return DontShowDialog();
                 }
 
-                return new MaterialDialog.Builder(this.getActivity())
+                return new MaterialDialog.Builder(Objects.requireNonNull(this.getActivity()))
                         .title(R.string.decklist_delete_dialog_title)
                         .negativeText(R.string.dialog_cancel)
                         .items((CharSequence[]) deckNames)
@@ -205,36 +246,21 @@ public class DecklistDialogFragment extends FamiliarDialogFragment {
                                 );
                             }
 
+                            if (getParentDecklistFragment().getCurrentDeckName().equals(deckNames[position] + DecklistFragment.DECK_EXTENSION)) {
+                                getParentDecklistFragment().clearDeck(false);
+                            }
+
                         })
                         .build();
             }
             case DIALOG_CONFIRMATION: {
-                return new MaterialDialog.Builder(this.getActivity())
+                return new MaterialDialog.Builder(Objects.requireNonNull(this.getActivity()))
                         .title(R.string.decklist_clear)
                         .content(R.string.decklist_clear_dialog_text)
                         .positiveText(R.string.dialog_ok)
                         .onPositive((dialog, which) -> {
-
-                            /* do some cleaning up */
-                            getParentDecklistFragment().mCurrentDeck = "autosave";
-                            synchronized (getParentDecklistFragment().mCompressedDecklist) {
-                                getParentDecklistFragment().mCompressedDecklist.clear();
-                            }
-                            getParentDecklistFragment().getCardDataAdapter(0).notifyDataSetChanged();
-                            getParentDecklistFragment().mDeckName.setText(
-                                    R.string.decklist_unnamed_deck
-                            );
-                            getParentDecklistFragment().mDeckCards.setText(getResources().getQuantityString(R.plurals.decklist_cards_count, 0, 0));
-                            DecklistHelpers.WriteCompressedDecklist(
-                                    getActivity(),
-                                    getParentDecklistFragment().mCompressedDecklist,
-                                    getParentDecklistFragment().getCurrentDeckName()
-                            );
-                            getParentDecklistFragment().clearCardNameInput();
-                            getParentDecklistFragment().clearCardNumberInput();
-                            getParentDecklistFragment().uncheckFoilCheckbox();
+                            getParentDecklistFragment().clearDeck(true);
                             dialog.dismiss();
-
                         })
                         .negativeText(R.string.dialog_cancel)
                         .cancelable(true)
@@ -250,9 +276,25 @@ public class DecklistDialogFragment extends FamiliarDialogFragment {
                         DecklistFragment.LEGALITY_DIAOG_FROM, DecklistFragment.LEGALITY_DIALOG_TO);
                 ListView lv = new ListView(getActivity());
                 lv.setAdapter(adapter);
-                return new MaterialDialog.Builder(getActivity())
+                return new MaterialDialog.Builder(Objects.requireNonNull(getActivity()))
                         .customView(lv, false)
                         .title(R.string.decklist_legality)
+                        .build();
+            }
+            case DIALOG_PRICE_SETTING: {
+                return new MaterialDialog.Builder(Objects.requireNonNull(this.getActivity()))
+                        .title(R.string.pref_trade_price_title)
+                        .items(getResources().getStringArray(R.array.trade_option_entries))
+                        .itemsCallbackSingleChoice(getParentDecklistFragment().getPriceSetting().ordinal(), (dialog, itemView, which, text) -> {
+                            if (getParentDecklistFragment().getPriceSetting().ordinal() != which) {
+                                getParentDecklistFragment().setPriceSetting(MarketPriceInfo.PriceType.fromOrdinal(which));
+                                PreferenceAdapter.setDeckPrice(getContext(), getParentDecklistFragment().getPriceSetting());
+                                getParentDecklistFragment().getCardDataAdapter(0).notifyDataSetChanged();
+                                getParentDecklistFragment().updateTotalPrices(0);
+                            }
+                            dialog.dismiss();
+                            return true;
+                        })
                         .build();
             }
             default: {

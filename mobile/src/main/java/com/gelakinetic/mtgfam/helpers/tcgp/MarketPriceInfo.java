@@ -19,7 +19,6 @@
 
 package com.gelakinetic.mtgfam.helpers.tcgp;
 
-import com.gelakinetic.mtgfam.helpers.tcgp.JsonObjects.ProductDetails;
 import com.gelakinetic.mtgfam.helpers.tcgp.JsonObjects.ProductMarketPrice;
 
 public class MarketPriceInfo {
@@ -48,7 +47,7 @@ public class MarketPriceInfo {
         }
     }
 
-    class Price {
+    static class Price {
         final double low;
         final double mid;
         final double high;
@@ -71,7 +70,7 @@ public class MarketPriceInfo {
          *
          * @param price The object to copy
          */
-        public Price(Price price) {
+        Price(Price price) {
             if (null != price) {
                 low = price.low;
                 mid = price.mid;
@@ -120,9 +119,9 @@ public class MarketPriceInfo {
      * Create a MarketPriceInfo object from data retrieved from the TCGPlayer.com API
      *
      * @param results The MarketPrice results retrieved from the API. This contains prices.
-     * @param details The Details retrieved from the API. This contains the URL.
+     * @param url     The URL for this card
      */
-    public MarketPriceInfo(ProductMarketPrice.MarketPrice[] results, ProductDetails.Details[] details) {
+    public MarketPriceInfo(ProductMarketPrice.MarketPrice[] results, String url) {
         ProductMarketPrice.MarketPrice foilPrice = null;
         ProductMarketPrice.MarketPrice normalPrice = null;
         for (ProductMarketPrice.MarketPrice marketPrice : results) {
@@ -151,7 +150,21 @@ public class MarketPriceInfo {
         }
 
         /* Set the URL from the details */
-        mProductUrl = details[0].url + "?pk=MTGFAMILIA";
+        String affiliateCode = "MTGFAMILIA";
+        mProductUrl = url + "?partner=" + affiliateCode +
+                "&utm_campaign=affiliate" +
+                "&utm_medium=" + affiliateCode +
+                "&utm_source=" + affiliateCode;
+    }
+
+    public static class PriceAndFoil {
+        public final boolean isFoil;
+        public final double price;
+
+        PriceAndFoil(double _price, boolean _isFoil) {
+            isFoil = _isFoil;
+            price = _price;
+        }
     }
 
     /**
@@ -160,20 +173,20 @@ public class MarketPriceInfo {
      *
      * @param isFoil    true to return the foil type, false to return the normal price (if those prices exist)
      * @param priceType LOW, MID, HIGH, or MARKET
-     * @return The double price in dollars, or 0 of none was found
+     * @return The double price in dollars, or 0 of none was found, and if the card is foil or not
      */
-    public double getPrice(boolean isFoil, PriceType priceType) {
+    public PriceAndFoil getPrice(boolean isFoil, PriceType priceType) {
         /* Protection if a card only has foil or normal price, or if it didn't load */
         if (null == mNormalPrice && null != mFoilPrice) {
             isFoil = true;
         } else if (null == mFoilPrice && null != mNormalPrice) {
             isFoil = false;
         } else if (null == mFoilPrice) {
-            return 0;
+            return new PriceAndFoil(0, false);
         }
 
         Price priceInfo;
-        double toReturn = 0;
+        double toReturn;
         if (isFoil) {
             priceInfo = mFoilPrice;
         } else {
@@ -205,7 +218,7 @@ public class MarketPriceInfo {
             toReturn = priceInfo.market;
         }
 
-        return toReturn;
+        return new PriceAndFoil(toReturn, isFoil);
     }
 
     /**

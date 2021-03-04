@@ -26,8 +26,6 @@ import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.speech.tts.TextToSpeech;
-import android.support.annotation.NonNull;
-import android.support.v4.content.ContextCompat;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -41,6 +39,9 @@ import android.widget.GridLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 
+import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
+
 import com.gelakinetic.mtgfam.FamiliarActivity;
 import com.gelakinetic.mtgfam.R;
 import com.gelakinetic.mtgfam.fragments.dialogs.FamiliarDialogFragment;
@@ -49,11 +50,13 @@ import com.gelakinetic.mtgfam.helpers.LcPlayer;
 import com.gelakinetic.mtgfam.helpers.LcPlayer.CommanderEntry;
 import com.gelakinetic.mtgfam.helpers.LcPlayer.HistoryEntry;
 import com.gelakinetic.mtgfam.helpers.PreferenceAdapter;
+import com.gelakinetic.mtgfam.helpers.view.ViewUtil;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.Objects;
 
 public class LifeCounterFragment extends FamiliarFragment implements TextToSpeech.OnInitListener,
         AudioManager.OnAudioFocusChangeListener, TextToSpeech.OnUtteranceCompletedListener {
@@ -89,6 +92,8 @@ public class LifeCounterFragment extends FamiliarFragment implements TextToSpeec
     private View mScrollView;
     private int mListSizeWidth = -1;
     private int mListSizeHeight = -1;
+    private int mNumCols = 2;
+    private int mNumRows = 1;
     public int mLargestPlayerNumber = 0;
     /* TTS variables */
     private TextToSpeech mTts;
@@ -108,7 +113,7 @@ public class LifeCounterFragment extends FamiliarFragment implements TextToSpeec
         mTts = new TextToSpeech(getActivity(), this);
         mTts.setOnUtteranceCompletedListener(this);
 
-        mAudioManager = (AudioManager) getActivity().getSystemService(Context.AUDIO_SERVICE);
+        mAudioManager = (AudioManager) Objects.requireNonNull(getActivity()).getSystemService(Context.AUDIO_SERVICE);
 
         m9000Player = MediaPlayer.create(getActivity(), R.raw.over_9000);
         if (m9000Player != null) {
@@ -170,20 +175,18 @@ public class LifeCounterFragment extends FamiliarFragment implements TextToSpeec
                 boolean changed = false;
                 if (mListSizeHeight < mScrollView.getHeight()) {
                     mListSizeHeight = mScrollView.getHeight();
+                    float height = ViewUtil.convertPixelsToDp(mListSizeHeight, getContext());
+                    mNumRows = Math.max((int) Math.floor(height / 220f), mNumRows);
                     changed = true;
                 }
                 if (mListSizeWidth < mScrollView.getWidth()) {
                     mListSizeWidth = mScrollView.getWidth();
+                    float width = ViewUtil.convertPixelsToDp(mListSizeWidth, getContext());
+                    mNumCols = Math.max((int) Math.floor(width / 150f), mNumCols);
                     changed = true;
                 }
                 if (changed) {
-                    if (getActivity().getResources().getConfiguration().orientation
-                            == Configuration.ORIENTATION_LANDSCAPE) {
-                        if (mDisplayMode == DISPLAY_COMMANDER) {
-                            /* Conveniently takes care of re-adding the sized views in the right number of rows */
-                            changeDisplayMode(false);
-                        }
-                    }
+                    changeDisplayMode(false);
                     resizeAllPlayers();
                 }
             }
@@ -236,7 +239,7 @@ public class LifeCounterFragment extends FamiliarFragment implements TextToSpeec
         mPlayers.clear();
 
         /* Remove the screen on lock, restore the brightness */
-        getActivity().getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        Objects.requireNonNull(getActivity()).getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         onUserActive();
     }
 
@@ -269,7 +272,7 @@ public class LifeCounterFragment extends FamiliarFragment implements TextToSpeec
         setStatDisplaying(mStatDisplaying);
 
         if (PreferenceAdapter.getKeepScreenOn(getContext())) {
-            getActivity().getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            Objects.requireNonNull(getActivity()).getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         }
     }
 
@@ -282,7 +285,7 @@ public class LifeCounterFragment extends FamiliarFragment implements TextToSpeec
             if (PreferenceAdapter.getKeepScreenOn(getContext()) &&
                     PreferenceAdapter.getDimScreen(getContext())) {
                 float dimLevel = (float) PreferenceAdapter.getDimLevel(getContext()) / (float) 100;
-                WindowManager.LayoutParams layoutParams = getActivity().getWindow().getAttributes();
+                WindowManager.LayoutParams layoutParams = Objects.requireNonNull(getActivity()).getWindow().getAttributes();
                 layoutParams.screenBrightness = dimLevel;
                 getActivity().getWindow().setAttributes(layoutParams);
             }
@@ -297,7 +300,7 @@ public class LifeCounterFragment extends FamiliarFragment implements TextToSpeec
     @Override
     public void onUserActive() {
         if (PreferenceAdapter.getKeepScreenOn(getContext())) {
-            WindowManager.LayoutParams layoutParams = getActivity().getWindow().getAttributes();
+            WindowManager.LayoutParams layoutParams = Objects.requireNonNull(getActivity()).getWindow().getAttributes();
             layoutParams.screenBrightness = -1;
             getActivity().getWindow().setAttributes(layoutParams);
         }
@@ -310,7 +313,7 @@ public class LifeCounterFragment extends FamiliarFragment implements TextToSpeec
      * @param inflater The inflater to use to inflate the menu
      */
     @Override
-    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
+    public void onCreateOptionsMenu(@NonNull Menu menu, @NonNull MenuInflater inflater) {
         super.onCreateOptionsMenu(menu, inflater);
         inflater.inflate(R.menu.life_counter_menu, menu);
     }
@@ -321,15 +324,11 @@ public class LifeCounterFragment extends FamiliarFragment implements TextToSpeec
      * @param menu The menu to show or hide the "announce life totals" button in.
      */
     @Override
-    public void onPrepareOptionsMenu(Menu menu) {
+    public void onPrepareOptionsMenu(@NonNull Menu menu) {
         super.onPrepareOptionsMenu(menu);
         MenuItem menuItem = menu.findItem(R.id.announce_life);
         assert menuItem != null;
-        if (!mTtsInit || getFamiliarActivity() == null || !getFamiliarActivity().mIsMenuVisible) {
-            menuItem.setVisible(false);
-        } else {
-            menuItem.setVisible(true);
-        }
+        menuItem.setVisible(mTtsInit && getFamiliarActivity() != null && getFamiliarActivity().mIsMenuVisible);
     }
 
     /**
@@ -341,36 +340,29 @@ public class LifeCounterFragment extends FamiliarFragment implements TextToSpeec
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         /* Handle item selection */
-        switch (item.getItemId()) {
-            case R.id.add_player:
-                /* Add the player to the ArrayList, set the commander info, and draw the new view */
-                addPlayer();
-                setCommanderInfo(-1);
-                addPlayerView(mPlayers.get(mPlayers.size() - 1));
-                return true;
-            case R.id.remove_player:
-                /* Show a dialog of players to remove */
-                showDialog(LifeCounterDialogFragment.DIALOG_REMOVE_PLAYER);
-                return true;
-            case R.id.announce_life:
-                /* Vocalize the current life totals */
-                announceLifeTotals();
-                return true;
-            case R.id.edit_gatherings:
-                /* Start a GatheringsFragment to edit gatherings */
-                GatheringsFragment rlFrag = new GatheringsFragment();
-                startNewFragment(rlFrag, null);
-                return true;
-            case R.id.set_gathering:
-                /* Show a dialog of gatherings a user can set */
-                showDialog(LifeCounterDialogFragment.DIALOG_SET_GATHERING);
-                return true;
-            case R.id.display_mode:
-                /* Show a dialog to change the display mode (normal, compact, commander) */
-                showDialog(LifeCounterDialogFragment.DIALOG_CHANGE_DISPLAY);
-                return true;
-            default:
-                return super.onOptionsItemSelected(item);
+        if (item.getItemId() == R.id.add_player) {                /* Add the player to the ArrayList, set the commander info, and draw the new view */
+            addPlayer();
+            setCommanderInfo(-1);
+            addPlayerView(mPlayers.get(mPlayers.size() - 1));
+            return true;
+        } else if (item.getItemId() == R.id.remove_player) {                /* Show a dialog of players to remove */
+            showDialog(LifeCounterDialogFragment.DIALOG_REMOVE_PLAYER);
+            return true;
+        } else if (item.getItemId() == R.id.announce_life) {                /* Vocalize the current life totals */
+            announceLifeTotals();
+            return true;
+        } else if (item.getItemId() == R.id.edit_gatherings) {                /* Start a GatheringsFragment to edit gatherings */
+            GatheringsFragment rlFrag = new GatheringsFragment();
+            startNewFragment(rlFrag, null);
+            return true;
+        } else if (item.getItemId() == R.id.set_gathering) {                /* Show a dialog of gatherings a user can set */
+            showDialog(LifeCounterDialogFragment.DIALOG_SET_GATHERING);
+            return true;
+        } else if (item.getItemId() == R.id.display_mode) {                /* Show a dialog to change the display mode (normal, compact, commander) */
+            showDialog(LifeCounterDialogFragment.DIALOG_CHANGE_DISPLAY);
+            return true;
+        } else {
+            return super.onOptionsItemSelected(item);
         }
     }
 
@@ -442,7 +434,7 @@ public class LifeCounterFragment extends FamiliarFragment implements TextToSpeec
 
         mGridLayout.removeAllViews();
 
-        if (getActivity().getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT) {
+        if (Objects.requireNonNull(getActivity()).getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT) {
             switch (mDisplayMode) {
                 case DISPLAY_NORMAL:
                     mGridLayout.setOrientation(GridLayout.HORIZONTAL);
@@ -451,7 +443,7 @@ public class LifeCounterFragment extends FamiliarFragment implements TextToSpeec
                     break;
                 case DISPLAY_COMPACT:
                     mGridLayout.setOrientation(GridLayout.HORIZONTAL);
-                    mGridLayout.setColumnCount(2);
+                    mGridLayout.setColumnCount(mNumCols);
                     mGridLayout.setRowCount(GridLayout.UNDEFINED);
                     break;
                 case DISPLAY_COMMANDER:
@@ -463,14 +455,14 @@ public class LifeCounterFragment extends FamiliarFragment implements TextToSpeec
         } else {
             switch (mDisplayMode) {
                 case DISPLAY_NORMAL:
-                    mGridLayout.setOrientation(GridLayout.HORIZONTAL);
+                    mGridLayout.setOrientation(GridLayout.VERTICAL);
                     mGridLayout.setColumnCount(GridLayout.UNDEFINED);
                     mGridLayout.setRowCount(1);
                     break;
                 case DISPLAY_COMPACT:
-                    mGridLayout.setOrientation(GridLayout.HORIZONTAL);
+                    mGridLayout.setOrientation(GridLayout.VERTICAL);
                     mGridLayout.setColumnCount(GridLayout.UNDEFINED);
-                    mGridLayout.setRowCount(1);
+                    mGridLayout.setRowCount(mNumRows);
                     break;
                 case DISPLAY_COMMANDER:
                     mGridLayout.setOrientation(GridLayout.VERTICAL);
@@ -516,7 +508,7 @@ public class LifeCounterFragment extends FamiliarFragment implements TextToSpeec
             mCommanderPlayerView.removeAllViews();
             if (mPlayers.size() > 0 && null != mPlayers.get(0).mView) {
                 mCommanderPlayerView.addView(mPlayers.get(0).mView);
-                mPlayers.get(0).setSize(mListSizeWidth, mListSizeHeight, mDisplayMode, getActivity().getResources()
+                mPlayers.get(0).setSize(mListSizeWidth, mListSizeHeight, mNumRows, mNumCols, mDisplayMode, getActivity().getResources()
                                 .getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT,
                         mPlayers.size() == 1);
             }
@@ -547,8 +539,8 @@ public class LifeCounterFragment extends FamiliarFragment implements TextToSpeec
                 /* Show this player's info in mCommanderPlayerView */
                 mCommanderPlayerView.removeAllViews();
                 mCommanderPlayerView.addView(player.mView);
-                player.setSize(mListSizeWidth, mListSizeHeight, mDisplayMode,
-                        getActivity().getResources().getConfiguration().orientation
+                player.setSize(mListSizeWidth, mListSizeHeight, mNumRows, mNumCols, mDisplayMode,
+                        Objects.requireNonNull(getActivity()).getResources().getConfiguration().orientation
                                 == Configuration.ORIENTATION_PORTRAIT, mPlayers.size() == 1
                 );
             });
@@ -571,7 +563,7 @@ public class LifeCounterFragment extends FamiliarFragment implements TextToSpeec
     private void setStatDisplaying(int statMode) {
         mStatDisplaying = statMode;
 
-        int disabledColor = ContextCompat.getColor(getContext(),
+        int disabledColor = ContextCompat.getColor(Objects.requireNonNull(getContext()),
                 getFamiliarActivity().getResourceIdFromAttr(R.attr.lc_disabled));
         int enabledColor = ContextCompat.getColor(getContext(),
                 getFamiliarActivity().getResourceIdFromAttr(R.attr.lc_enabled));
@@ -644,7 +636,7 @@ public class LifeCounterFragment extends FamiliarFragment implements TextToSpeec
         /* If the player's name ends in a number, and the number is larger than mPlayerNumber, set mPlayerNumber as
            it */
         try {
-            String nameParts[] = player.mName.split(" ");
+            String[] nameParts = player.mName.split(" ");
             int number = Integer.parseInt(nameParts[nameParts.length - 1]);
             if (number > mLargestPlayerNumber) {
                 mLargestPlayerNumber = number;
@@ -678,7 +670,7 @@ public class LifeCounterFragment extends FamiliarFragment implements TextToSpeec
             /* If the player's name ends in a number, and the number is larger than mPlayerNumber, set mPlayerNumber as
                it */
             try {
-                String nameParts[] = player.mName.split(" ");
+                String[] nameParts = player.mName.split(" ");
                 int number = Integer.parseInt(nameParts[nameParts.length - 1]);
                 if (number > mLargestPlayerNumber) {
                     mLargestPlayerNumber = number;
@@ -761,6 +753,12 @@ public class LifeCounterFragment extends FamiliarFragment implements TextToSpeec
                 player.mCommanderCasting = 0;
             }
 
+            try {
+                player.mCommanderExperienceCounter = Integer.parseInt(data[8]);
+            } catch (Exception e) {
+                player.mCommanderExperienceCounter = 0;
+            }
+
             mPlayers.add(player);
         } catch (ArrayIndexOutOfBoundsException e) {
             /* Eat it */
@@ -804,10 +802,10 @@ public class LifeCounterFragment extends FamiliarFragment implements TextToSpeec
                     mTtsInit = true;
                     if (mIsSearchViewOpen) {
                         /* Search view is open, pend menu refresh */
-                        mAfterSearchClosedRunnable = () -> getActivity().invalidateOptionsMenu();
+                        mAfterSearchClosedRunnable = () -> Objects.requireNonNull(getActivity()).invalidateOptionsMenu();
                     } else {
                         /* Redraw menu */
-                        getActivity().invalidateOptionsMenu();
+                        Objects.requireNonNull(getActivity()).invalidateOptionsMenu();
                     }
                 }
             } else if (status == TextToSpeech.ERROR) {
@@ -833,7 +831,7 @@ public class LifeCounterFragment extends FamiliarFragment implements TextToSpeec
                             /* If the life is over 9000, split the string on an IMPROBABLE_NUMBER, and insert a call to
                                the m9000Player */
                             String tmp = getResources().getQuantityString(R.plurals.life_counter_spoken_life, IMPROBABLE_NUMBER, p.mName, IMPROBABLE_NUMBER);
-                            String parts[] = tmp.split(Integer.toString(IMPROBABLE_NUMBER));
+                            String[] parts = tmp.split(Integer.toString(IMPROBABLE_NUMBER));
                             mVocalizations.add(parts[0]);
                             mVocalizations.add(OVER_9000_KEY);
                             mVocalizations.add(parts[1]);
@@ -879,7 +877,7 @@ public class LifeCounterFragment extends FamiliarFragment implements TextToSpeec
     public void onUtteranceCompleted(String key) {
         if (mVocalizations.size() > 0) {
             String toSpeak = mVocalizations.poll();
-            if (toSpeak.equals(OVER_9000_KEY)) {
+            if (Objects.requireNonNull(toSpeak).equals(OVER_9000_KEY)) {
                 try {
                     m9000Player.stop();
                     m9000Player.prepare();
@@ -919,8 +917,8 @@ public class LifeCounterFragment extends FamiliarFragment implements TextToSpeec
     public void resizeAllPlayers() {
         if (mListSizeHeight != -1) {
             for (LcPlayer player : mPlayers) {
-                player.setSize(mListSizeWidth, mListSizeHeight, mDisplayMode,
-                        getActivity().getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT,
+                player.setSize(mListSizeWidth, mListSizeHeight, mNumRows, mNumCols, mDisplayMode,
+                        Objects.requireNonNull(getActivity()).getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT,
                         mPlayers.size() == 1);
             }
         }

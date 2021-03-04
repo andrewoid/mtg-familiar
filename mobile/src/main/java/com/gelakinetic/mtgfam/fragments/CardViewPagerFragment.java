@@ -21,16 +21,19 @@ package com.gelakinetic.mtgfam.fragments;
 
 import android.os.Bundle;
 import android.os.Parcelable;
-import android.support.annotation.NonNull;
-import android.support.v4.app.Fragment;
-import android.support.v4.app.FragmentManager;
-import android.support.v4.app.FragmentPagerAdapter;
-import android.support.v4.view.ViewPager;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.NonNull;
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentManager;
+import androidx.fragment.app.FragmentPagerAdapter;
+import androidx.viewpager.widget.ViewPager;
+
 import com.gelakinetic.mtgfam.R;
+
+import java.util.Objects;
 
 /**
  * This class will nest the CardViewFragments found by a search in a ViewPager
@@ -46,7 +49,7 @@ public class CardViewPagerFragment extends FamiliarFragment {
      * @return The currently viewed CardViewFragment in the CardViewPagerFragment
      */
     public CardViewFragment getCurrentFragment() {
-        return ((CardViewPagerAdapter) mViewPager.getAdapter()).getCurrentFragment();
+        return ((CardViewPagerAdapter) Objects.requireNonNull(mViewPager.getAdapter())).getCurrentFragment();
     }
 
     /**
@@ -100,7 +103,7 @@ public class CardViewPagerFragment extends FamiliarFragment {
         }
 
         Bundle args = getArguments();
-        long cardIds[] = args.getLongArray(CARD_ID_ARRAY);
+        long[] cardIds = Objects.requireNonNull(args).getLongArray(CARD_ID_ARRAY);
         int currentPosition = args.getInt(STARTING_CARD_POSITION);
 
         CardViewPagerAdapter pagerAdapter = new CardViewPagerAdapter(getChildFragmentManager(), cardIds);
@@ -122,13 +125,21 @@ public class CardViewPagerFragment extends FamiliarFragment {
      */
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        ((CardViewPagerAdapter) mViewPager.getAdapter()).getCurrentFragment().onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (null != mViewPager) {
+            CardViewPagerAdapter adapter = (CardViewPagerAdapter) mViewPager.getAdapter();
+            if (null != adapter) {
+                CardViewFragment frag = adapter.getCurrentFragment();
+                if (null != frag) {
+                    frag.onRequestPermissionsResult(requestCode, permissions, grantResults);
+                }
+            }
+        }
     }
 
     /**
      * A simple pager adapter that holds CardViewFragments
      */
-    private class CardViewPagerAdapter extends FragmentPagerAdapter {
+    private static class CardViewPagerAdapter extends FragmentPagerAdapter {
         final long[] mCardIds;
         private CardViewFragment mCurrentFragment;
 
@@ -161,7 +172,7 @@ public class CardViewPagerFragment extends FamiliarFragment {
          * @return The Fragment at that index
          */
         @Override
-        public Fragment getItem(int position) {
+        public @NonNull Fragment getItem(int position) {
             CardViewFragment cvf = new CardViewFragment();
             Bundle args = new Bundle();
             args.putLong(CardViewFragment.CARD_ID, mCardIds[position]);
@@ -196,7 +207,7 @@ public class CardViewPagerFragment extends FamiliarFragment {
          * @param object    The same object that was returned by instantiateItem(View, int).
          */
         @Override
-        public void setPrimaryItem(ViewGroup container, int position, Object object) {
+        public void setPrimaryItem(@NonNull ViewGroup container, int position, @NonNull Object object) {
             if (getCurrentFragment() != object) {
                 mCurrentFragment = ((CardViewFragment) object);
             }
@@ -208,8 +219,7 @@ public class CardViewPagerFragment extends FamiliarFragment {
      * Just to be fancy, lets spice up the transformation
      * http://developer.android.com/training/animation/screen-slide.html
      */
-    class DepthPageTransformer implements ViewPager.PageTransformer {
-        private final float MIN_SCALE = 0.75f;
+    static class DepthPageTransformer implements ViewPager.PageTransformer {
 
         /**
          * A custom transformer to get a sweet page effect
@@ -237,6 +247,7 @@ public class CardViewPagerFragment extends FamiliarFragment {
                 view.setTranslationX(pageWidth * -position);
 
                 /* Scale the page down (between MIN_SCALE and 1) */
+                float MIN_SCALE = 0.75f;
                 float scaleFactor = MIN_SCALE + (1 - MIN_SCALE) * (1 - Math.abs(position));
                 view.setScaleX(scaleFactor);
                 view.setScaleY(scaleFactor);

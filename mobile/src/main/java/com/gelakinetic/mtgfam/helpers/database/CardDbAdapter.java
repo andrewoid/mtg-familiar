@@ -21,8 +21,6 @@ package com.gelakinetic.mtgfam.helpers.database;
 
 import android.app.SearchManager;
 import android.content.ContentValues;
-import android.content.Context;
-import android.content.res.Resources.NotFoundException;
 import android.database.Cursor;
 import android.database.CursorIndexOutOfBoundsException;
 import android.database.DatabaseUtils;
@@ -34,14 +32,12 @@ import android.provider.BaseColumns;
 import com.gelakinetic.GathererScraper.JsonTypes.Card;
 import com.gelakinetic.GathererScraper.JsonTypes.Expansion;
 import com.gelakinetic.GathererScraper.Language;
-import com.gelakinetic.mtgfam.R;
+import com.gelakinetic.mtgfam.helpers.FamiliarLogger;
 import com.gelakinetic.mtgfam.helpers.MtgCard;
-import com.gelakinetic.mtgfam.helpers.PreferenceAdapter;
 import com.gelakinetic.mtgfam.helpers.SearchCriteria;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import org.apache.commons.lang3.StringUtils;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -50,7 +46,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.zip.GZIPInputStream;
 
 /**
  * Simple Cards database access helper class. Defines the basic CRUD operations and gives the
@@ -59,10 +54,7 @@ import java.util.zip.GZIPInputStream;
 public class CardDbAdapter {
 
     /* Database version. Must be incremented whenever datagz is updated */
-    public static final int DATABASE_VERSION = 95;
-
-    /* The name of the database */
-    public static final String DATABASE_NAME = "data";
+    public static final int DATABASE_VERSION = 116;
 
     /* Database Tables */
     public static final String DATABASE_TABLE_CARDS = "cards";
@@ -77,6 +69,7 @@ public class CardDbAdapter {
     public static final String KEY_ID = "_id";
     public static final String KEY_NAME = SearchManager.SUGGEST_COLUMN_TEXT_1;
     public static final String KEY_SET = "expansion";
+    public static final String KEY_SCRYFALL_SET_CODE = "scryfall_set_code";
     public static final String KEY_SUPERTYPE = "supertype";
     public static final String KEY_SUBTYPE = "subtype";
     public static final String KEY_ABILITY = "cardtext";
@@ -104,6 +97,7 @@ public class CardDbAdapter {
     private static final String KEY_NAME_TCGPLAYER = "name_tcgplayer";
     private static final String KEY_ONLINE_ONLY = "online_only";
     private static final String KEY_BORDER_COLOR = "border_color";
+    public static final String KEY_SET_TYPE = "set_type";
     private static final String KEY_FORMAT = "format";
     public static final String KEY_DIGEST = "digest";
     private static final String KEY_RULINGS = "rulings";
@@ -118,18 +112,23 @@ public class CardDbAdapter {
     public static final String KEY_NAME_CHINESE_SIMPLIFIED = "NAME_CHINESE_SIMPLIFIED";
     public static final String KEY_MULTIVERSEID_CHINESE_SIMPLIFIED = "MULTIVERSEID_CHINESE_SIMPLIFIED";
     public static final String KEY_NAME_FRENCH = "NAME_FRENCH";
+    public static final String KEY_NAME_NO_ACCENT_FRENCH = "NAME_NO_ACCENT_FRENCH";
     public static final String KEY_MULTIVERSEID_FRENCH = "MULTIVERSEID_FRENCH";
     public static final String KEY_NAME_GERMAN = "NAME_GERMAN";
+    public static final String KEY_NAME_NO_ACCENT_GERMAN = "NAME_NO_ACCENT_GERMAN";
     public static final String KEY_MULTIVERSEID_GERMAN = "MULTIVERSEID_GERMAN";
     public static final String KEY_NAME_ITALIAN = "NAME_ITALIAN";
+    public static final String KEY_NAME_NO_ACCENT_ITALIAN = "NAME_NO_ACCENT_ITALIAN";
     public static final String KEY_MULTIVERSEID_ITALIAN = "MULTIVERSEID_ITALIAN";
     public static final String KEY_NAME_JAPANESE = "NAME_JAPANESE";
     public static final String KEY_MULTIVERSEID_JAPANESE = "MULTIVERSEID_JAPANESE";
     public static final String KEY_NAME_PORTUGUESE_BRAZIL = "NAME_PORTUGUESE_BRAZIL";
+    public static final String KEY_NAME_NO_ACCENT_PORTUGUESE_BRAZIL = "NAME_NO_ACCENT_PORTUGUESE_BRAZIL";
     public static final String KEY_MULTIVERSEID_PORTUGUESE_BRAZIL = "MULTIVERSEID_PORTUGUESE_BRAZIL";
     public static final String KEY_NAME_RUSSIAN = "NAME_RUSSIAN";
     public static final String KEY_MULTIVERSEID_RUSSIAN = "MULTIVERSEID_RUSSIAN";
     public static final String KEY_NAME_SPANISH = "NAME_SPANISH";
+    public static final String KEY_NAME_NO_ACCENT_SPANISH = "NAME_NO_ACCENT_SPANISH";
     public static final String KEY_MULTIVERSEID_SPANISH = "MULTIVERSEID_SPANISH";
     public static final String KEY_NAME_KOREAN = "NAME_KOREAN";
     public static final String KEY_MULTIVERSEID_KOREAN = "MULTIVERSEID_KOREAN";
@@ -140,6 +139,7 @@ public class CardDbAdapter {
             DATABASE_TABLE_CARDS + "." + KEY_ID,
             DATABASE_TABLE_CARDS + "." + KEY_NAME,
             DATABASE_TABLE_CARDS + "." + KEY_SET,
+            DATABASE_TABLE_CARDS + "." + KEY_SCRYFALL_SET_CODE,
             DATABASE_TABLE_CARDS + "." + KEY_NUMBER,
             DATABASE_TABLE_CARDS + "." + KEY_SUPERTYPE,
             DATABASE_TABLE_CARDS + "." + KEY_MANACOST,
@@ -162,18 +162,23 @@ public class CardDbAdapter {
             DATABASE_TABLE_CARDS + "." + KEY_NAME_CHINESE_SIMPLIFIED,
             DATABASE_TABLE_CARDS + "." + KEY_MULTIVERSEID_CHINESE_SIMPLIFIED,
             DATABASE_TABLE_CARDS + "." + KEY_NAME_FRENCH,
+            DATABASE_TABLE_CARDS + "." + KEY_NAME_NO_ACCENT_FRENCH,
             DATABASE_TABLE_CARDS + "." + KEY_MULTIVERSEID_FRENCH,
             DATABASE_TABLE_CARDS + "." + KEY_NAME_GERMAN,
+            DATABASE_TABLE_CARDS + "." + KEY_NAME_NO_ACCENT_GERMAN,
             DATABASE_TABLE_CARDS + "." + KEY_MULTIVERSEID_GERMAN,
             DATABASE_TABLE_CARDS + "." + KEY_NAME_ITALIAN,
+            DATABASE_TABLE_CARDS + "." + KEY_NAME_NO_ACCENT_ITALIAN,
             DATABASE_TABLE_CARDS + "." + KEY_MULTIVERSEID_ITALIAN,
             DATABASE_TABLE_CARDS + "." + KEY_NAME_JAPANESE,
             DATABASE_TABLE_CARDS + "." + KEY_MULTIVERSEID_JAPANESE,
             DATABASE_TABLE_CARDS + "." + KEY_NAME_PORTUGUESE_BRAZIL,
+            DATABASE_TABLE_CARDS + "." + KEY_NAME_NO_ACCENT_PORTUGUESE_BRAZIL,
             DATABASE_TABLE_CARDS + "." + KEY_MULTIVERSEID_PORTUGUESE_BRAZIL,
             DATABASE_TABLE_CARDS + "." + KEY_NAME_RUSSIAN,
             DATABASE_TABLE_CARDS + "." + KEY_MULTIVERSEID_RUSSIAN,
             DATABASE_TABLE_CARDS + "." + KEY_NAME_SPANISH,
+            DATABASE_TABLE_CARDS + "." + KEY_NAME_NO_ACCENT_SPANISH,
             DATABASE_TABLE_CARDS + "." + KEY_MULTIVERSEID_SPANISH,
             DATABASE_TABLE_CARDS + "." + KEY_NAME_KOREAN,
             DATABASE_TABLE_CARDS + "." + KEY_MULTIVERSEID_KOREAN,
@@ -191,8 +196,8 @@ public class CardDbAdapter {
             DATABASE_TABLE_SETS + "." + KEY_DATE,
             DATABASE_TABLE_SETS + "." + KEY_CAN_BE_FOIL,
             DATABASE_TABLE_SETS + "." + KEY_ONLINE_ONLY,
-            DATABASE_TABLE_SETS + "." + KEY_BORDER_COLOR
-    ));
+            DATABASE_TABLE_SETS + "." + KEY_BORDER_COLOR,
+            DATABASE_TABLE_SETS + "." + KEY_SET_TYPE));
 
     /* SQL Strings used to create the database tables */
     private static final String DATABASE_CREATE_FORMATS =
@@ -224,6 +229,7 @@ public class CardDbAdapter {
                     KEY_ID + " integer primary key autoincrement, " +
                     KEY_NAME + " text not null, " +
                     KEY_SET + " text not null, " +
+                    KEY_SCRYFALL_SET_CODE + " text not null, " +
                     KEY_SUPERTYPE + " text not null, " +
                     KEY_SUBTYPE + " text not null, " +
                     KEY_RARITY + " integer, " +
@@ -247,18 +253,23 @@ public class CardDbAdapter {
                     KEY_NAME_CHINESE_SIMPLIFIED + " text, " +
                     KEY_MULTIVERSEID_CHINESE_SIMPLIFIED + " integer, " +
                     KEY_NAME_FRENCH + " text, " +
+                    KEY_NAME_NO_ACCENT_FRENCH + " text, " +
                     KEY_MULTIVERSEID_FRENCH + " integer, " +
                     KEY_NAME_GERMAN + " text, " +
+                    KEY_NAME_NO_ACCENT_GERMAN + " text, " +
                     KEY_MULTIVERSEID_GERMAN + " integer, " +
                     KEY_NAME_ITALIAN + " text, " +
+                    KEY_NAME_NO_ACCENT_ITALIAN + " text, " +
                     KEY_MULTIVERSEID_ITALIAN + " integer, " +
                     KEY_NAME_JAPANESE + " text, " +
                     KEY_MULTIVERSEID_JAPANESE + " integer, " +
                     KEY_NAME_PORTUGUESE_BRAZIL + " text, " +
+                    KEY_NAME_NO_ACCENT_PORTUGUESE_BRAZIL + " text, " +
                     KEY_MULTIVERSEID_PORTUGUESE_BRAZIL + " integer, " +
                     KEY_NAME_RUSSIAN + " text, " +
                     KEY_MULTIVERSEID_RUSSIAN + " integer, " +
                     KEY_NAME_SPANISH + " text, " +
+                    KEY_NAME_NO_ACCENT_SPANISH + " text, " +
                     KEY_MULTIVERSEID_SPANISH + " integer, " +
                     KEY_NAME_KOREAN + " text, " +
                     KEY_MULTIVERSEID_KOREAN + " integer);";
@@ -274,6 +285,7 @@ public class CardDbAdapter {
                     KEY_CAN_BE_FOIL + " integer, " +
                     KEY_ONLINE_ONLY + " integer, " +
                     KEY_BORDER_COLOR + " text, " +
+                    KEY_SET_TYPE + " text, " +
                     KEY_DATE + " integer);";
 
     private static final String DATABASE_CREATE_RULES =
@@ -305,8 +317,6 @@ public class CardDbAdapter {
     public static final int LEGAL = 0;
     public static final int BANNED = 1;
     public static final int RESTRICTED = 2;
-
-    private static final String[] ILLEGAL_SETS = {"UG", "UNH", "UST", "ARS", "PCP", "PP2"};
 
     /* The various types of multi-cards */
     public enum MultiCardType {
@@ -352,75 +362,9 @@ public class CardDbAdapter {
             sqLiteDatabase.execSQL(DATABASE_CREATE_BANNED_CARDS);
             sqLiteDatabase.execSQL(DATABASE_CREATE_RULES);
             sqLiteDatabase.execSQL(DATABASE_CREATE_GLOSSARY);
-        } catch (SQLiteException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException e) {
             throw new FamiliarDbException(e);
         }
-    }
-
-    /**
-     * Copy the internally packaged gzipped database to where Android can access it.
-     *
-     * @param context The Context to get the packaged gzipped database from
-     */
-    public static void copyDB(Context context) {
-
-        try {
-
-            String dbPath = context.getFilesDir().getPath();
-            dbPath = dbPath.substring(0, dbPath.lastIndexOf("/")) + "/databases";
-
-            File folder = new File(dbPath);
-            if (!folder.exists()) {
-                if (!folder.mkdir()) {
-                    /* Couldn't make the folder, so exit */
-                    return;
-                }
-            }
-            File dbFile = new File(folder, DATABASE_NAME);
-            if (dbFile.exists()) {
-                if (!dbFile.delete()) {
-                    /* Couldn't delete the old database, so exit */
-                    return;
-                }
-                PreferenceAdapter.setDatabaseVersion(context, -1);
-            }
-            if (!dbFile.exists()) {
-
-                GZIPInputStream gis = new GZIPInputStream(context.getResources()
-                        .openRawResource(R.raw.datagz));
-                FileOutputStream fos = new FileOutputStream(dbFile);
-
-                byte[] buffer = new byte[1024];
-                int length;
-                while ((length = gis.read(buffer)) > 0) {
-                    fos.write(buffer, 0, length);
-                }
-
-                PreferenceAdapter.setDatabaseVersion(context, CardDbAdapter.DATABASE_VERSION);
-
-                /* Close the streams */
-                fos.flush();
-                fos.close();
-                gis.close();
-            }
-        } catch (NotFoundException | IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    /**
-     * Helper function to check if the database is up to date.
-     *
-     * @param context The context used to get the database file
-     * @return true if the database does not exist, is too small, or has a lower version than
-     * DATABASE_VERSION
-     */
-    public static boolean isDbOutOfDate(Context context) {
-        String dbPath = context.getFilesDir().getPath();
-        dbPath = dbPath.substring(0, dbPath.lastIndexOf("/")) + "/databases";
-        File f = new File(dbPath, DATABASE_NAME);
-        int dbVersion = PreferenceAdapter.getDatabaseVersion(context);
-        return (!f.exists() || f.length() < 1048576 || dbVersion < CardDbAdapter.DATABASE_VERSION);
     }
 
     /**
@@ -451,6 +395,7 @@ public class CardDbAdapter {
     /**
      * Return a String array of all the unique values in a given column in DATABASE_TABLE_CARDS.
      *
+     * @param table       The database table to get a column from
      * @param colKey      The column to return unique values from
      * @param shouldSplit Whether or not each individual word from the column should be considered
      *                    unique, or whether the full String should be considered unique
@@ -458,15 +403,16 @@ public class CardDbAdapter {
      * @return A String array of unique values from the given column
      * @throws FamiliarDbException If something goes wrong
      */
-    public static String[] getUniqueColumnArray(String colKey, boolean shouldSplit,
+    public static String[] getUniqueColumnArray(String table, String colKey, boolean shouldSplit,
                                                 SQLiteDatabase database) throws FamiliarDbException {
         Cursor cursor = null;
         try {
             String query =
                     "SELECT " + KEY_ID + ", " + colKey +
-                            " FROM " + DATABASE_TABLE_CARDS +
+                            " FROM " + table +
                             " GROUP BY " + colKey +
                             " ORDER BY " + colKey;
+            FamiliarLogger.logRawQuery(query, null, new Throwable().getStackTrace()[0].getMethodName());
             cursor = database.rawQuery(query, null);
 
             // If the cursor is null or has no results, return an empty array
@@ -493,7 +439,7 @@ public class CardDbAdapter {
             }
 
             /* Turn the HashSet into an array, and sort it */
-            String[] wordsArr = words.toArray(new String[words.size()]);
+            String[] wordsArr = words.toArray(new String[0]);
             Arrays.sort(wordsArr);
             return wordsArr;
 
@@ -508,6 +454,8 @@ public class CardDbAdapter {
 
     /**
      * Given a list of KEY_ID values, return a cursor with all of a cards' information.
+     * <p>
+     * TODO online only pref
      *
      * @param ids        A list of ids for cards to fetch
      * @param orderByStr A string of keys and directions to order this query by
@@ -530,6 +478,8 @@ public class CardDbAdapter {
             }
             String[] allCardDataKeys = new String[ALL_CARD_DATA_KEYS.size()];
             ALL_CARD_DATA_KEYS.toArray(allCardDataKeys);
+            FamiliarLogger.logQuery(true, DATABASE_TABLE_CARDS, allCardDataKeys, selectionStr.toString(), null,
+                    null, null, orderByStr, null, new Throwable().getStackTrace()[0].getMethodName());
             Cursor cursor = database.query(true, DATABASE_TABLE_CARDS, allCardDataKeys, selectionStr.toString(), null,
                     null, null, orderByStr, null);
 
@@ -537,24 +487,27 @@ public class CardDbAdapter {
                 cursor.moveToFirst();
             }
             return cursor;
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
         }
     }
 
     /**
      * Given a card's name, return a cursor with all of that card's requested information.
+     * <p>
+     * TODO online only pref
      *
-     * @param name        The name of the card to query
-     * @param fields      The requested information about the card
-     * @param shouldGroup true if the query should group by KEY_CODE, false otherwise
-     * @param offlineOnly true if the query should exclude online only cards, false otherwise
-     * @param mDb         The database to query
+     * @param name               The name of the card to query
+     * @param fields             The requested information about the card
+     * @param shouldGroup        true if the query should group by KEY_CODE, false otherwise
+     * @param offlineOnly        true if the query should exclude online only cards, false otherwise
+     * @param preferOptionalFoil true if the query should order cards that may or may not be foil first
+     * @param mDb                The database to query
      * @return A cursor with the requested information about the card
      * @throws FamiliarDbException If something goes wrong
      */
     public static Cursor fetchCardByName(String name, List<String> fields, boolean shouldGroup,
-                                         boolean offlineOnly, SQLiteDatabase mDb)
+                                         boolean offlineOnly, boolean preferOptionalFoil, SQLiteDatabase mDb)
             throws FamiliarDbException {
         try {
             /* Sanitize the string and remove accent marks */
@@ -577,20 +530,27 @@ public class CardDbAdapter {
             if (shouldGroup) {
                 sql.append(" GROUP BY " + DATABASE_TABLE_SETS + "." + KEY_CODE);
             }
-            sql.append(" ORDER BY " + DATABASE_TABLE_SETS + "." + KEY_DATE + " DESC");
+            if (preferOptionalFoil) {
+                sql.append(" ORDER BY " + DATABASE_TABLE_SETS + "." + KEY_CAN_BE_FOIL + " DESC, " + DATABASE_TABLE_SETS + "." + KEY_DATE + " DESC");
+            } else {
+                sql.append(" ORDER BY " + DATABASE_TABLE_SETS + "." + KEY_DATE + " DESC");
+            }
 
+            FamiliarLogger.logRawQuery(sql.toString(), null, new Throwable().getStackTrace()[0].getMethodName());
             Cursor c = mDb.rawQuery(sql.toString(), null);
             if (c != null) {
                 c.moveToFirst();
             }
             return c;
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
         }
     }
 
     /**
      * Given a multiverse ID, return a cursor with all of that card's requested information.
+     * <p>
+     * TODO online only pref
      *
      * @param multiverseId The card's multivers ID
      * @param fields       The requested information about the card
@@ -614,18 +574,21 @@ public class CardDbAdapter {
             }
             sql.append(" FROM " + DATABASE_TABLE_CARDS + " JOIN " + DATABASE_TABLE_SETS + " ON " + DATABASE_TABLE_SETS + "." + KEY_CODE + " = " + DATABASE_TABLE_CARDS + "." + KEY_SET + " WHERE " + DATABASE_TABLE_CARDS + "." + KEY_MULTIVERSEID + " = ").append(multiverseId).append(" GROUP BY ").append(DATABASE_TABLE_SETS).append(".").append(KEY_CODE).append(" ORDER BY ").append(DATABASE_TABLE_SETS).append(".").append(KEY_DATE).append(" DESC");
 
+            FamiliarLogger.logRawQuery(sql.toString(), null, new Throwable().getStackTrace()[0].getMethodName());
             Cursor cursor = database.rawQuery(sql.toString(), null);
             if (cursor != null) {
                 cursor.moveToFirst();
             }
             return cursor;
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
         }
     }
 
     /**
      * Given a card name and set code, return a cursor with that card's requested data.
+     * <p>
+     * TODO online only pref
      *
      * @param name    The card's name
      * @param setCode The card's set code
@@ -655,25 +618,28 @@ public class CardDbAdapter {
 
             sql.append(" FROM " + DATABASE_TABLE_CARDS + " JOIN " + DATABASE_TABLE_SETS + " ON " + DATABASE_TABLE_SETS + "." + KEY_CODE + " = " + DATABASE_TABLE_CARDS + "." + KEY_SET + " WHERE " + DATABASE_TABLE_CARDS + "." + KEY_NAME_NO_ACCENT + " = ").append(name).append(" COLLATE NOCASE").append(" AND ").append(DATABASE_TABLE_CARDS).append(".").append(KEY_SET).append(" = ").append(setCode).append(" ORDER BY ").append(DATABASE_TABLE_SETS).append(".").append(KEY_DATE).append(" DESC");
 
+            FamiliarLogger.logRawQuery(sql.toString(), null, new Throwable().getStackTrace()[0].getMethodName());
             Cursor c = mDb.rawQuery(sql.toString(), null);
             if (c != null) {
                 c.moveToFirst();
             }
             return c;
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
         }
     }
 
     /**
      * Given a list of cards, fetch all the database info about them in a single query
+     * <p>
+     * TODO online only pref
      *
      * @param cards A list of cards to fetch info for
      * @param mDb   The database to query
      * @return A Cursor with the requested information
      * @throws FamiliarDbException If something goes wrong
      */
-    public static Cursor fetchCardByNamesAndSets(ArrayList<MtgCard> cards, SQLiteDatabase mDb)
+    public static Cursor fetchCardByNamesAndSets(List<MtgCard> cards, SQLiteDatabase mDb)
             throws FamiliarDbException {
         try {
             StringBuilder sql = new StringBuilder("SELECT ");
@@ -705,23 +671,30 @@ public class CardDbAdapter {
                 } else {
                     sql.append(" OR ");
                 }
-                sql.append("(c_").append(KEY_NAME_NO_ACCENT).append(" = ").append(sanitizeString(card.getName(), true)).append(" COLLATE NOCASE AND ");
-                sql.append("c_").append(KEY_SET).append(" = ").append(sanitizeString(card.getExpansion(), false)).append(")");
+                sql.append("(c_").append(KEY_NAME_NO_ACCENT).append(" = ").append(sanitizeString(card.getName(), true)).append(" COLLATE NOCASE");
+                if (sanitizeString(card.getExpansion(), false).length() > 0) {
+                    sql.append(" AND ").append("c_").append(KEY_SET).append(" = ").append(sanitizeString(card.getExpansion(), false)).append(")");
+                } else {
+                    sql.append(")");
+                }
             }
             sql.append(" ORDER BY s_").append(KEY_DATE).append(" DESC");
 
+            FamiliarLogger.logRawQuery(sql.toString(), null, new Throwable().getStackTrace()[0].getMethodName());
             Cursor c = mDb.rawQuery(sql.toString(), null);
             if (c != null) {
                 c.moveToFirst();
             }
             return c;
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
         }
     }
 
     /**
      * Given a card name, return the KEY_ID for that card.
+     * <p>
+     * TODO online only pref
      *
      * @param name The name of the card
      * @param mDb  The database to query
@@ -742,26 +715,71 @@ public class CardDbAdapter {
                 " WHERE " + DATABASE_TABLE_CARDS + "." + KEY_NAME_NO_ACCENT + " = "
                 + name + " COLLATE NOCASE ORDER BY " + DATABASE_TABLE_SETS + "." + KEY_DATE + " DESC";
 
-        Cursor cursor = null;
-        try {
-            cursor = mDb.rawQuery(sql, null);
+        try (Cursor cursor = mDb.rawQuery(sql, null)) {
             if (cursor != null && cursor.getCount() > 0) {
                 cursor.moveToFirst();
                 return cursor.getLong(cursor.getColumnIndex(CardDbAdapter.KEY_ID));
             }
             return -1;
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
-        } finally {
-            if (null != cursor) {
-                cursor.close();
+        }
+    }
+
+    /**
+     * Given a card name, return the KEY_ID of matching cards, searching every language.
+     * <p>
+     * TODO online only pref
+     *
+     * @param name The name of the card
+     * @param mDb  The database to query
+     * @return The KEY_ID values
+     * @throws FamiliarDbException If something goes wrong
+     */
+    public static long[] fetchIdsByLocalizedName(String name, SQLiteDatabase mDb) throws FamiliarDbException {
+        /* replace lowercase ae with Ae */
+        name = sanitizeString(name, true);
+
+        String sql = "SELECT " +
+                DATABASE_TABLE_CARDS + "." + KEY_ID +
+                " FROM " + DATABASE_TABLE_CARDS +
+                " JOIN " + DATABASE_TABLE_SETS +
+                " ON " + DATABASE_TABLE_CARDS + "." + KEY_SET + "=" +
+                DATABASE_TABLE_SETS + "." + KEY_CODE +
+                " WHERE " + name + " COLLATE NOCASE IN (" +
+                DATABASE_TABLE_CARDS + "." + KEY_NAME_NO_ACCENT + "," +
+                DATABASE_TABLE_CARDS + "." + KEY_NAME_CHINESE_TRADITIONAL + "," +
+                DATABASE_TABLE_CARDS + "." + KEY_NAME_CHINESE_SIMPLIFIED + "," +
+                DATABASE_TABLE_CARDS + "." + KEY_NAME_NO_ACCENT_FRENCH + "," +
+                DATABASE_TABLE_CARDS + "." + KEY_NAME_NO_ACCENT_GERMAN + "," +
+                DATABASE_TABLE_CARDS + "." + KEY_NAME_NO_ACCENT_ITALIAN + "," +
+                DATABASE_TABLE_CARDS + "." + KEY_NAME_JAPANESE + "," +
+                DATABASE_TABLE_CARDS + "." + KEY_NAME_NO_ACCENT_PORTUGUESE_BRAZIL + "," +
+                DATABASE_TABLE_CARDS + "." + KEY_NAME_RUSSIAN + "," +
+                DATABASE_TABLE_CARDS + "." + KEY_NAME_NO_ACCENT_SPANISH + "," +
+                DATABASE_TABLE_CARDS + "." + KEY_NAME_KOREAN +
+                ") ORDER BY " + DATABASE_TABLE_SETS + "." + KEY_DATE + " DESC";
+
+        try (Cursor cursor = mDb.rawQuery(sql, null)) {
+            if (cursor != null && cursor.getCount() > 0) {
+                long[] ids = new long[cursor.getCount()];
+                for (int i = 0; i < cursor.getCount(); i++) {
+                    cursor.moveToNext();
+                    ids[i] = cursor.getLong(cursor.getColumnIndex(CardDbAdapter.KEY_ID));
+                }
+                return ids;
             }
+            return new long[0];
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
+            throw new FamiliarDbException(e);
         }
     }
 
     /**
      * This function will query the database with the information in criteria and return a cursor
      * with the requested data.
+     * <p>
+     * TODO online only pref
      *
      * @param criteria    The criteria used to build the query
      * @param backface    Whether or not the results should include the 'b' side of multicards
@@ -775,6 +793,8 @@ public class CardDbAdapter {
     public static Cursor Search(SearchCriteria criteria, boolean backface, String[] returnTypes,
                                 boolean consolidate, String orderByStr, SQLiteDatabase mDb)
             throws FamiliarDbException {
+        FamiliarLogger.appendToLogFile(new StringBuilder(criteria.toJson()), new Throwable().getStackTrace()[0].getMethodName());
+
         StringBuilder statement = new StringBuilder(" WHERE 1=1");
 
         if (criteria.name != null) {
@@ -783,6 +803,8 @@ public class CardDbAdapter {
                 statement.append(" AND (" + DATABASE_TABLE_CARDS + "." + KEY_NAME_NO_ACCENT + " LIKE ").append(sanitizeString("%" + s + "%", true)).append(")");
             }
         }
+
+
 
         /* Check if the watermark matches exactly */
         if (criteria.watermark != null) {
@@ -794,8 +816,30 @@ public class CardDbAdapter {
          * exact text, all words, or just any one word.
          */
         if (criteria.text != null) {
-            /* Separate each individual */
-            String[] cardTextParts = criteria.text.split(" ");
+            /* Separate each individual word or quoted phrase */
+            Set<String> cardTextParts = new HashSet<>();
+
+            /* The limit=-1 avoids split() to remove trailing empty strings, required for the algorithm */
+            /* The negative lookbehind avoids matching escaped backslashes */
+            String[] blocks = criteria.text.split("(?<!\\\\)\"");
+
+            for (int i = 0; i < blocks.length; i++) {
+                String block = blocks[i].replaceAll("\\\\\"", "\"");
+
+                /* Even blocks are non-quoted blocks */
+                if (i % 2 == 0) {
+                    // Split the block by spaces
+                    for (String word : block.split("\\s+")) {
+                        if (!word.isEmpty()) {
+                            cardTextParts.add(word);
+                        }
+                    }
+                } else {
+                    if (!block.isEmpty()) {
+                        cardTextParts.add(block);
+                    }
+                }
+            }
 
             /*
              * The following switch statement tests to see which text search logic was chosen by the
@@ -837,9 +881,6 @@ public class CardDbAdapter {
                     }
                     statement.append(")");
                     break;
-                case 2:
-                    statement.append(" AND (" + DATABASE_TABLE_CARDS + "." + KEY_ABILITY + " LIKE ").append(sanitizeString("%" + criteria.text + "%", false)).append(")");
-                    break;
                 default:
                     break;
             }
@@ -853,6 +894,26 @@ public class CardDbAdapter {
 
         List<String> supertypes = criteria.superTypes;
         List<String> subtypes = criteria.subTypes;
+
+        if (criteria.isCommander) {
+            // Don't check the backface for commanders
+            backface = false;
+
+            // Planeswalkers can be commanders
+            statement.append(" AND ((").append(DATABASE_TABLE_CARDS).append(".").append(KEY_SUPERTYPE).append(" LIKE '%Planeswalker%'");
+            // In brawl, every planeswalker is a commander! Otherwise it needs special text
+            if (!("Brawl".equals(criteria.format) || "Historic".equals(criteria.format))) {
+                statement.append(" AND ").append(DATABASE_TABLE_CARDS).append(".").append(KEY_ABILITY).append(" LIKE '%can be your commander%'");
+            }
+
+            // Legendary creatures can be commanders
+            statement.append(") OR (").append(DATABASE_TABLE_CARDS).append(".").append(KEY_SUPERTYPE).append(" LIKE '%Legendary%Creature%'))");
+
+            // Set the format to Commander if it isn't set already, so the banlist applies
+            if (criteria.format == null) {
+                criteria.format = "Commander";
+            }
+        }
 
         if (supertypes != null && !supertypes.isEmpty()) {
             /* Concat a leading and a trailing space to the supertype */
@@ -956,60 +1017,71 @@ public class CardDbAdapter {
         if (null != criteria.color &&
                 !(criteria.color.equals("wubrgl") || (criteria.color.equals("WUBRGL") &&
                         criteria.colorLogic == 0))) {
-            boolean firstPrint = true;
-
             /* Can't contain these colors
              **
              * ...if the chosen color logic was exactly (2) or none (3) of the selected colors.
              */
             if (criteria.colorLogic > 1) {
-                statement.append(" AND ((");
+                statement.append(" AND (( 1=1");
                 for (byte b : criteria.color.getBytes()) {
                     char ch = (char) b;
-
-                    if (ch > 'a') {
-                        if (firstPrint)
-                            firstPrint = false;
-                        else
-                            statement.append(" AND ");
-
-                        if (ch == 'l')
-                            statement.append(DATABASE_TABLE_CARDS + "." + KEY_COLOR + " NOT GLOB '[CLA]'");
-                        else
-                            statement.append(DATABASE_TABLE_CARDS + "." + KEY_COLOR + " NOT LIKE '%").append(Character.toUpperCase(ch)).append("%'");
+                    switch (ch) {
+                        case 'l': {
+                            // This means colorless
+                            statement.append(" AND ").append(DATABASE_TABLE_CARDS + "." + KEY_COLOR + " NOT LIKE ''");
+                            break;
+                        }
+                        case 'w':
+                        case 'u':
+                        case 'b':
+                        case 'r':
+                        case 'g': {
+                            statement.append(" AND ").append(DATABASE_TABLE_CARDS + "." + KEY_COLOR + " NOT LIKE '%").append(Character.toUpperCase(ch)).append("%'");
+                            break;
+                        }
                     }
                 }
-                statement.append(") AND (");
+                statement.append(") AND ( ");
             }
 
-            firstPrint = true;
-
             /* Might contain these colors */
-            if (criteria.colorLogic < 2)
+            if (criteria.colorLogic < 2) {
                 statement.append(" AND (");
+            }
+
+            /* Start the logic and pick the conjunction */
+            String conjunction;
+            if (criteria.colorLogic == 1 || criteria.colorLogic == 3) {
+                conjunction = " AND ";
+                statement.append(" 1=1 ");
+            } else {
+                conjunction = " OR ";
+                statement.append(" 0=1 ");
+            }
 
             for (byte b : criteria.color.getBytes()) {
                 char ch = (char) b;
-                if (ch < 'a') {
-                    if (firstPrint)
-                        firstPrint = false;
-                    else {
-                        if (criteria.colorLogic == 1 || criteria.colorLogic == 3)
-                            statement.append(" AND ");
-                        else
-                            statement.append(" OR ");
+                switch (ch) {
+                    case 'L': {
+                        statement.append(conjunction).append(DATABASE_TABLE_CARDS + "." + KEY_COLOR + " LIKE ''");
+                        break;
                     }
-
-                    if (ch == 'L')
-                        statement.append(DATABASE_TABLE_CARDS + "." + KEY_COLOR + " GLOB '[CLA]'");
-                    else
-                        statement.append(DATABASE_TABLE_CARDS + "." + KEY_COLOR + " LIKE '%").append(ch).append("%'");
+                    case 'W':
+                    case 'U':
+                    case 'B':
+                    case 'R':
+                    case 'G': {
+                        statement.append(conjunction).append(DATABASE_TABLE_CARDS + "." + KEY_COLOR + " LIKE '%").append(ch).append("%'");
+                        break;
+                    }
                 }
             }
-            if (criteria.colorLogic > 1)
+
+            if (criteria.colorLogic > 1) {
                 statement.append("))");
-            else
+            } else {
                 statement.append(")");
+            }
         }
         /* End of addition
          *************************************************************************************/
@@ -1021,21 +1093,27 @@ public class CardDbAdapter {
         if (null != criteria.colorIdentity && !(criteria.colorIdentity.equals("wubrgl"))) {
             switch (criteria.colorIdentityLogic) {
                 case 0: {
+                    // All colors selected and "may include any color" doesn't make sense
+                    if (criteria.colorIdentity.equals("WUBRGL")) {
+                        break;
+                    }
                     /* search_May_include_any_colors */
-                    boolean first = true;
-                    statement.append(" AND (");
+                    statement.append(" AND ( 1=1");
                     for (int i = 0; i < criteria.colorIdentity.length(); i++) {
-                        if (Character.isLowerCase(criteria.colorIdentity.charAt(i))) {
-                            if (!first) {
-                                statement.append(" AND ");
-                            }
-                            if (criteria.colorIdentity.charAt(i) == 'l') {
+                        switch (criteria.colorIdentity.charAt(i)) {
+                            case 'l': {
                                 /* If colorless isn't selected, don't allow empty identities */
-                                statement.append("(" + DATABASE_TABLE_CARDS + "." + KEY_COLOR_IDENTITY + " NOT LIKE \"\")");
-                            } else {
-                                statement.append("(" + DATABASE_TABLE_CARDS + "." + KEY_COLOR_IDENTITY + " NOT LIKE \"%").append(criteria.colorIdentity.toUpperCase().charAt(i)).append("%\")");
+                                statement.append(" AND (" + DATABASE_TABLE_CARDS + "." + KEY_COLOR_IDENTITY + " NOT LIKE \"\")");
+                                break;
                             }
-                            first = false;
+                            case 'w':
+                            case 'u':
+                            case 'b':
+                            case 'r':
+                            case 'g': {
+                                statement.append(" AND (" + DATABASE_TABLE_CARDS + "." + KEY_COLOR_IDENTITY + " NOT LIKE \"%").append(criteria.colorIdentity.toUpperCase().charAt(i)).append("%\")");
+                                break;
+                            }
                         }
                     }
                     statement.append(")");
@@ -1045,12 +1123,19 @@ public class CardDbAdapter {
                     /* search_Exact_all_selected_and_no_others */
                     StringBuilder colorIdentity = new StringBuilder();
                     for (int i = 0; i < criteria.colorIdentity.length(); i++) {
-                        if (Character.isUpperCase(criteria.colorIdentity.charAt(i))) {
-                            if (criteria.colorIdentity.charAt(i) == 'L') {
+                        switch (criteria.colorIdentity.charAt(i)) {
+                            case 'L': {
                                 /* Colorless identity is the empty string */
                                 statement.append(" AND (" + DATABASE_TABLE_CARDS + "." + KEY_COLOR_IDENTITY + " = \"\")");
-                            } else {
+                                break;
+                            }
+                            case 'W':
+                            case 'U':
+                            case 'B':
+                            case 'R':
+                            case 'G': {
                                 colorIdentity.append(criteria.colorIdentity.charAt(i));
+                                break;
                             }
                         }
                     }
@@ -1072,6 +1157,23 @@ public class CardDbAdapter {
                     statement.append(" OR ");
                 }
                 statement.append(DATABASE_TABLE_CARDS + "." + KEY_SET + " = '").append(set).append("'");
+            }
+
+            statement.append(")");
+        }
+
+        if (criteria.setTypes != null && !criteria.setTypes.isEmpty()) {
+            statement.append(" AND (");
+
+            boolean first = true;
+
+            for (String setType : criteria.setTypes) {
+                if (first) {
+                    first = false;
+                } else {
+                    statement.append(" OR ");
+                }
+                statement.append(KEY_SET_TYPE + " = '").append(setType).append("'");
             }
 
             statement.append(")");
@@ -1128,17 +1230,7 @@ public class CardDbAdapter {
                     /* Cards like 'Dryad Arbor'. */
                     "OR " + DATABASE_TABLE_CARDS + "." + KEY_SUPERTYPE + " LIKE '%Land Creature%')");
             /* Filter out 'UN-'sets*/
-            statement.append(" AND NOT " + DATABASE_TABLE_CARDS + "." + KEY_SET + " IN (");
-            boolean first = true;
-            for (String illegalSet : ILLEGAL_SETS) {
-                if (first) {
-                    first = false;
-                } else {
-                    statement.append(", ");
-                }
-                statement.append("'").append(illegalSet).append("'");
-            }
-            statement.append(")");
+            statement.append(" AND NOT ").append(DATABASE_TABLE_SETS).append(".").append(KEY_BORDER_COLOR).append(" = \"Silver\"");
         }
 
         if (criteria.rarity != null) {
@@ -1157,33 +1249,55 @@ public class CardDbAdapter {
         }
 
         if (criteria.format != null) {
-            try {
-                /* Check if the format is eternal or not, by the number of legal sets */
-                String numLegalSetsSql = "SELECT * FROM " + DATABASE_TABLE_LEGAL_SETS + " WHERE " + KEY_FORMAT + " = \"" + criteria.format + "\"";
-
-                Cursor numLegalSetCursor;
-                numLegalSetCursor = mDb.rawQuery(numLegalSetsSql, null);
-
+            /* Check if the format is eternal or not, by the number of legal sets */
+            try (Cursor numLegalSetCursor = mDb.rawQuery("SELECT * FROM " + DATABASE_TABLE_LEGAL_SETS + " WHERE " + KEY_FORMAT + " = \"" + criteria.format + "\"", null)) {
                 /* If the format is not eternal, filter by set */
                 if (numLegalSetCursor.getCount() > 0) {
-                    String toAppend = " AND " + DATABASE_TABLE_CARDS + "." + KEY_NAME + " IN (" + " SELECT " + DATABASE_TABLE_CARDS + "_B." + KEY_NAME + " FROM " + DATABASE_TABLE_CARDS + " " + DATABASE_TABLE_CARDS + "_B " + " WHERE ";
-                    // Ensure pauper only searches commons in valid Pauper sets
-                    if ("Pauper".equals(criteria.format)) {
-                        toAppend += DATABASE_TABLE_CARDS + "_B." + KEY_RARITY + " = " + ((int) 'C') + " AND ";
-                    }
-                    toAppend += DATABASE_TABLE_CARDS + "_B." + KEY_SET + " IN (" + " SELECT " + DATABASE_TABLE_LEGAL_SETS + "." + KEY_SET + " FROM " + DATABASE_TABLE_LEGAL_SETS + " WHERE " + DATABASE_TABLE_LEGAL_SETS + "." + KEY_FORMAT + "='" + criteria.format + "' ) )";
-                    statement.append(toAppend);
+                    statement
+                            .append(" AND ")
+                            .append(DATABASE_TABLE_CARDS).append(".").append(KEY_NAME)
+                            .append(" IN ( SELECT ")
+                            .append(DATABASE_TABLE_CARDS).append("_B.").append(KEY_NAME)
+                            .append(" FROM ")
+                            .append(DATABASE_TABLE_CARDS).append(" ").append(DATABASE_TABLE_CARDS).append("_B ")
+                            .append(" WHERE ")
+                            .append(DATABASE_TABLE_CARDS).append("_B.").append(KEY_SET)
+                            .append(" IN ( SELECT ")
+                            .append(DATABASE_TABLE_LEGAL_SETS).append(".").append(KEY_SET)
+                            .append(" FROM ")
+                            .append(DATABASE_TABLE_LEGAL_SETS)
+                            .append(" WHERE ")
+                            .append(DATABASE_TABLE_LEGAL_SETS).append(".").append(KEY_FORMAT).append("='").append(criteria.format).append("' ) )");
                 } else {
                     /* Otherwise filter silver bordered cards, giant cards */
-                    for (String illegalSet : ILLEGAL_SETS) {
-                        statement.append(" AND NOT " + DATABASE_TABLE_CARDS + "." + KEY_SET + " = '").append(illegalSet).append("'");
-                    }
-                    statement.append(" AND " + DATABASE_TABLE_CARDS + "." + KEY_SUPERTYPE + " NOT LIKE 'Plane'" + " AND " + DATABASE_TABLE_CARDS + "." + KEY_SUPERTYPE + " NOT LIKE 'Conspiracy'" + " AND " + DATABASE_TABLE_CARDS + "." + KEY_SUPERTYPE + " NOT LIKE '%Scheme'" + " AND " + DATABASE_TABLE_CARDS + "." + KEY_SUPERTYPE + " NOT LIKE 'Vanguard'");
+                    statement.append(" AND NOT ")
+                            .append(DATABASE_TABLE_SETS).append(".").append(KEY_BORDER_COLOR).append(" = \"Silver\"");
+                    statement
+                            .append(" AND ").append(DATABASE_TABLE_CARDS).append(".").append(KEY_SUPERTYPE).append(" NOT LIKE 'Plane'")
+                            .append(" AND ").append(DATABASE_TABLE_CARDS).append(".").append(KEY_SUPERTYPE).append(" NOT LIKE 'Conspiracy'")
+                            .append(" AND ").append(DATABASE_TABLE_CARDS).append(".").append(KEY_SUPERTYPE).append(" NOT LIKE '%Scheme'")
+                            .append(" AND ").append(DATABASE_TABLE_CARDS).append(".").append(KEY_SUPERTYPE).append(" NOT LIKE 'Vanguard'");
                 }
-                statement.append(" AND " + DATABASE_TABLE_CARDS + "." + KEY_NAME + " NOT IN (SELECT " + DATABASE_TABLE_BANNED_CARDS + "." + KEY_NAME + " FROM " + DATABASE_TABLE_BANNED_CARDS + " WHERE " + DATABASE_TABLE_BANNED_CARDS + "." + KEY_FORMAT + " = '").append(criteria.format).append("'").append(" AND ").append(DATABASE_TABLE_BANNED_CARDS).append(".").append(KEY_LEGALITY).append(" = ").append(BANNED).append(")");
 
-                numLegalSetCursor.close();
-            } catch (SQLiteException | IllegalStateException e) {
+                /* And make sure the name isn't in the list of banned cads */
+                statement.append(" AND ")
+                        .append(DATABASE_TABLE_CARDS).append(".").append(KEY_NAME)
+                        .append(" NOT IN (SELECT ")
+                        .append(DATABASE_TABLE_BANNED_CARDS).append(".").append(KEY_NAME)
+                        .append(" FROM ")
+                        .append(DATABASE_TABLE_BANNED_CARDS)
+                        .append(" WHERE ")
+                        .append(DATABASE_TABLE_BANNED_CARDS).append(".").append(KEY_FORMAT).append(" = '").append(criteria.format).append("'")
+                        .append(" AND ")
+                        .append(DATABASE_TABLE_BANNED_CARDS).append(".").append(KEY_LEGALITY).append(" = ").append(BANNED)
+                        .append(")");
+
+                // Ensure pauper only searches commons in valid Pauper sets
+                if ("Pauper".equals(criteria.format)) {
+                    statement.append(" AND ").append(DATABASE_TABLE_CARDS).append(".").append(KEY_RARITY).append(" = ").append(((int) 'C')).append(" ");
+                }
+
+            } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
                 throw new FamiliarDbException(e);
             }
         }
@@ -1225,6 +1339,7 @@ public class CardDbAdapter {
                 sel.append(DATABASE_TABLE_CARDS + ".").append(s).append(" AS ").append(s);
             }
             sel.append(", " + DATABASE_TABLE_SETS + "." + KEY_DATE);
+            sel.append(", " + DATABASE_TABLE_SETS + "." + KEY_SET_TYPE);
 
             String sql = "SELECT * FROM (SELECT " + sel + " FROM " + DATABASE_TABLE_CARDS
                     + " JOIN " + DATABASE_TABLE_SETS + " ON "
@@ -1233,28 +1348,34 @@ public class CardDbAdapter {
 
             if (null == orderByStr) {
                 orderByStr = KEY_NAME + " COLLATE UNICODE";
+            } else if (!(criteria.setLogic != MOST_RECENT_PRINTING && criteria.setLogic != ALL_PRINTINGS)) {
+                // When sorting by set, sort by date first, then name
+                orderByStr = orderByStr.replace(CardDbAdapter.KEY_SET + " asc", CardDbAdapter.KEY_DATE + " asc," + CardDbAdapter.KEY_SET + " asc");
+                orderByStr = orderByStr.replace(CardDbAdapter.KEY_SET + " desc", CardDbAdapter.KEY_DATE + " desc," + CardDbAdapter.KEY_SET + " desc");
             }
 
             if (consolidate) {
-                sql += " ORDER BY " + DATABASE_TABLE_SETS + "." + KEY_DATE
+                sql += " ORDER BY " + DATABASE_TABLE_SETS + "." + KEY_DATE + " DESC, " + KEY_ID + " DESC"
                         + ") GROUP BY " + KEY_NAME + " ORDER BY " + orderByStr;
             } else {
                 sql += " ORDER BY " + orderByStr
-                        + ", " + DATABASE_TABLE_SETS + "." + KEY_DATE
-                        + " DESC)";
+                        + ", " + DATABASE_TABLE_SETS + "." + KEY_DATE + " ASC, " + KEY_ID + " DESC)";
             }
+            FamiliarLogger.logRawQuery(sql, null, new Throwable().getStackTrace()[0].getMethodName());
             Cursor cursor = mDb.rawQuery(sql, null);
             if (cursor != null) {
                 cursor.moveToFirst();
             }
             return cursor;
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
         }
     }
 
     /**
      * Given a set and a card number, return the KEY_ID for that card.
+     * <p>
+     * TODO online only pref
      *
      * @param set    The set code
      * @param number The number to look up
@@ -1266,26 +1387,25 @@ public class CardDbAdapter {
             throws FamiliarDbException {
         String statement = "(" + KEY_NUMBER + " = '" + number + "') AND ("
                 + KEY_SET + " = '" + set + "')";
-        Cursor c = null;
-        try {
-            c = mDb.query(true, DATABASE_TABLE_CARDS,
-                    new String[]{KEY_ID}, statement, null, null, null,
-                    KEY_ID, null);
+        FamiliarLogger.logQuery(true, DATABASE_TABLE_CARDS,
+                new String[]{KEY_ID}, statement, null, null, null,
+                KEY_ID, null, new Throwable().getStackTrace()[0].getMethodName());
+        try (Cursor c = mDb.query(true, DATABASE_TABLE_CARDS,
+                new String[]{KEY_ID}, statement, null, null, null,
+                KEY_ID, null)) {
             c.moveToFirst();
             return c.getInt(c.getColumnIndex(KEY_ID));
         } catch (SQLiteException | IllegalStateException e) {
             throw new FamiliarDbException(e);
         } catch (CursorIndexOutOfBoundsException e) {
             return -1; /* The other half doesn't exist... */
-        } finally {
-            if (null != c) {
-                c.close();
-            }
         }
     }
 
     /**
      * Returns a card name queried by set and collector's number.
+     * <p>
+     * TODO online only pref
      *
      * @param set    The set code
      * @param number The number to look up
@@ -1297,24 +1417,46 @@ public class CardDbAdapter {
             throws FamiliarDbException {
         String statement = "(" + KEY_NUMBER + " = '" + number + "') AND ("
                 + KEY_SET + " = '" + set + "')";
-        Cursor c = null;
-        try {
-            c = mDb.query(true, DATABASE_TABLE_CARDS,
-                    new String[]{KEY_NAME}, statement, null, null, null,
-                    KEY_NAME, null);
+        FamiliarLogger.logQuery(true, DATABASE_TABLE_CARDS,
+                new String[]{KEY_NAME}, statement, null, null, null,
+                KEY_NAME, null, new Throwable().getStackTrace()[0].getMethodName());
+        try (Cursor c = mDb.query(true, DATABASE_TABLE_CARDS,
+                new String[]{KEY_NAME}, statement, null, null, null,
+                KEY_NAME, null)) {
             c.moveToFirst();
             return c.getString(c.getColumnIndex(KEY_NAME));
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
-        } finally {
-            if (null != c) {
-                c.close();
-            }
+        }
+    }
+
+    /**
+     * Given a card name, find the ID for that card in the database
+     * <p>
+     * TODO online only pref
+     *
+     * @param name The name of the card to search for
+     * @return The ID in the database
+     */
+    public static long getIdFromName(String name, SQLiteDatabase mDb) throws FamiliarDbException {
+        String statement = "(" + KEY_NAME + " = " + sanitizeString(name, false) + ")";
+        FamiliarLogger.logQuery(true, DATABASE_TABLE_CARDS,
+                new String[]{KEY_ID}, statement, null, null, null,
+                KEY_NAME, null, new Throwable().getStackTrace()[0].getMethodName());
+        try (Cursor c = mDb.query(true, DATABASE_TABLE_CARDS,
+                new String[]{KEY_ID}, statement, null, null, null,
+                KEY_NAME, null)) {
+            c.moveToFirst();
+            return c.getLong(c.getColumnIndex(KEY_ID));
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
+            throw new FamiliarDbException(e);
         }
     }
 
     /**
      * Returns a Cursor positioned at the word specified by rowId.
+     * <p>
+     * TODO online only pref
      *
      * @param rowId   id of word to retrieve
      * @param columns The columns to include, if null then all are included
@@ -1338,6 +1480,8 @@ public class CardDbAdapter {
              * This builds a query that looks like: SELECT <columns> FROM <table>
              * WHERE rowid = <rowId>
              */
+            FamiliarLogger.logBuiltQuery(columns, "rowid = ?", new String[]{rowId},
+                    KEY_NAME, null, KEY_NAME, new Throwable().getStackTrace()[0].getMethodName());
             Cursor cursor = builder.query(mDb, columns, "rowid = ?", new String[]{rowId},
                     KEY_NAME, null, KEY_NAME);
 
@@ -1347,13 +1491,15 @@ public class CardDbAdapter {
             }
 
             return cursor;
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
         }
     }
 
     /**
      * Returns a Cursor over all words that match the given query.
+     * <p>
+     * TODO online only pref
      *
      * @param query The string to search for
      * @param mDb   The database to query
@@ -1383,88 +1529,83 @@ public class CardDbAdapter {
                             DATABASE_TABLE_CARDS + "." + KEY_NAME + " COLLATE UNICODE, " +
                             DATABASE_TABLE_SETS + "." + KEY_DATE + " ASC" +
                             " ) GROUP BY " + KEY_NAME;
+            FamiliarLogger.logRawQuery(sql, null, new Throwable().getStackTrace()[0].getMethodName());
             return mDb.rawQuery(sql, null);
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
         }
     }
 
     /**
-     * Given a card name and the set it's from, return the card's multiverse ID.
+     * Given a collector's number and expansion, return the combined name for a multi-card
      *
-     * @param name    The card's name
-     * @param setCode The set code for this card
-     * @param mDb     The database to query
+     * @param expansion The expansion for this card
+     * @param number    The card's number, with a letter suffix
+     * @param mDb       The database to search
+     * @return The whole, combined name for this multi-part card
      * @throws FamiliarDbException If something goes wrong
      */
-    public static int getMultiverseIdFromNameAndSet(String name, String setCode, SQLiteDatabase mDb)
+    public static String getCombinedName(String expansion, String number, SQLiteDatabase mDb)
             throws FamiliarDbException {
-        String statement = "SELECT " + KEY_MULTIVERSEID + " from "
-                + DATABASE_TABLE_CARDS + " WHERE " + KEY_NAME_NO_ACCENT + " = "
-                + sanitizeString(name, true) + " COLLATE NOCASE AND " + KEY_SET + " = '" + setCode + "'";
 
-        Cursor c = null;
-        try {
-            c = mDb.rawQuery(statement, null);
-
-            if (c.getCount() > 0) {
-                c.moveToFirst();
-                return c.getInt(c.getColumnIndex(KEY_MULTIVERSEID));
-            } else {
-                return -1;
-            }
-        } catch (SQLiteException | IllegalStateException e) {
-            throw new FamiliarDbException(e);
-        } finally {
-            if (null != c) {
-                c.close();
-            }
-        }
-    }
-
-    /**
-     * Given a multiverseId for a multicard, return the full card name, which has each half of the
-     * card separated by "//".
-     *
-     * @param multiverseId The multiverse id to search for
-     * @param isAscending  Whether the query should be sorted in ascending or descending order
-     * @param mDb          The database to query
-     * @return A String name
-     * @throws FamiliarDbException If something goes wrong
-     */
-    public static String getSplitName(int multiverseId, boolean isAscending, SQLiteDatabase mDb)
-            throws FamiliarDbException {
-        String statement = "SELECT " + KEY_NAME + ", " + KEY_NUMBER + " from "
-                + DATABASE_TABLE_CARDS + " WHERE " + KEY_MULTIVERSEID + " = "
-                + multiverseId + " ORDER BY " + KEY_NUMBER;
-
-        if (isAscending) {
-            statement += " ASC";
-        } else {
-            statement += " DESC";
+        // Strip the last part of the number, if it is a letter
+        if (Character.isAlphabetic(number.charAt(number.length() - 1))) {
+            number = number.substring(0, number.length() - 1);
         }
 
-        Cursor c = null;
-        try {
-            c = mDb.rawQuery(statement, null);
+        // Select all rows from the database for cards with this number
+        String statement = "SELECT " + KEY_NAME + ", " + KEY_NUMBER +
+                " FROM " + DATABASE_TABLE_CARDS +
+                " WHERE " + KEY_SET + " = '" + expansion + "' AND " + KEY_NUMBER + " LIKE '" + number + "%'" +
+                " ORDER BY " + KEY_NUMBER + " ASC";
 
-            if (c.getCount() == 2) {
-                c.moveToFirst();
-                String retVal;
-                retVal = c.getString(c.getColumnIndex(KEY_NAME));
-                retVal += " // ";
+        // For every returned row
+        try (Cursor c = mDb.rawQuery(statement, null)) {
+            StringBuilder retVal = new StringBuilder();
+            c.moveToFirst();
+            while (!c.isAfterLast()) {
+                // If we're not starting off, append the delimiter
+                if (retVal.length() > 0) {
+                    retVal.append(" // ");
+                }
+                // Append the card name
+                retVal.append(c.getString(c.getColumnIndex(KEY_NAME)));
                 c.moveToNext();
-                retVal += c.getString(c.getColumnIndex(KEY_NAME));
-                return retVal;
-            } else {
-                return null;
             }
-        } catch (SQLiteException | IllegalStateException e) {
+            return retVal.toString();
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
-        } finally {
-            if (null != c) {
-                c.close();
+        }
+    }
+
+    /**
+     * For cards without a multiverse ID, find an equivalent for Gatherer lookups
+     *
+     * @param mName The name of this card
+     * @param mDb   The database to query for another multiverse ID
+     * @return A multiverse ID for a different card with the same name
+     * @throws FamiliarDbException If something goes wrong
+     */
+    public static int getEquivalentMultiverseId(String mName, SQLiteDatabase mDb) throws FamiliarDbException {
+        // Select all rows from the database for cards with this number
+        String statement = "SELECT " + KEY_MULTIVERSEID + ", " + KEY_DATE +
+                " FROM (" + DATABASE_TABLE_CARDS + " JOIN " + DATABASE_TABLE_SETS + " ON " + DATABASE_TABLE_SETS + "." + KEY_CODE + " = " + DATABASE_TABLE_CARDS + "." + KEY_SET + ")" +
+                " WHERE (" + DATABASE_TABLE_CARDS + "." + KEY_NAME + " = " + sanitizeString(mName, false) + ")" +
+                " ORDER BY " + KEY_DATE + " DESC";
+
+        // For every returned row
+        try (Cursor c = mDb.rawQuery(statement, null)) {
+            c.moveToFirst();
+            while (!c.isAfterLast()) {
+                int multiverseId = c.getInt(c.getColumnIndex(KEY_MULTIVERSEID));
+                if (multiverseId > 0) {
+                    return multiverseId;
+                }
+                c.moveToNext();
             }
+            return 0;
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
+            throw new FamiliarDbException(e);
         }
     }
 
@@ -1480,7 +1621,8 @@ public class CardDbAdapter {
         String delimiter = " - ";
         initialValues.put(KEY_NAME, card.getName());
         initialValues.put(KEY_SET, card.getExpansion());
-        String types[] = card.getType().split(delimiter);
+        initialValues.put(KEY_SCRYFALL_SET_CODE, card.getScryfallSetCode());
+        String[] types = card.getType().split(delimiter);
         if (types.length > 0) {
             initialValues.put(KEY_SUPERTYPE, types[0]);
         } else {
@@ -1513,7 +1655,7 @@ public class CardDbAdapter {
         initialValues.put(KEY_FLAVOR, card.getFlavor());
         initialValues.put(KEY_ARTIST, card.getArtist());
         initialValues.put(KEY_NUMBER, card.getNumber());
-        initialValues.put(KEY_COLOR, card.getColor());
+        initialValues.put(KEY_COLOR, card.getColor().replaceAll("[^WUBRGwubrg]", ""));
         initialValues.put(KEY_MULTIVERSEID, card.getMultiverseId());
         initialValues.put(KEY_COLOR_IDENTITY, card.getColorIdentity());
         initialValues.put(KEY_NAME_NO_ACCENT, removeAccentMarks(card.getName()));
@@ -1533,16 +1675,19 @@ public class CardDbAdapter {
                 }
                 case Language.French: {
                     initialValues.put(KEY_NAME_FRENCH, fp.getName());
+                    initialValues.put(KEY_NAME_NO_ACCENT_FRENCH, removeAccentMarks(fp.getName()));
                     initialValues.put(KEY_MULTIVERSEID_FRENCH, fp.getMultiverseId());
                     break;
                 }
                 case Language.German: {
                     initialValues.put(KEY_NAME_GERMAN, fp.getName());
+                    initialValues.put(KEY_NAME_NO_ACCENT_GERMAN, removeAccentMarks(fp.getName()));
                     initialValues.put(KEY_MULTIVERSEID_GERMAN, fp.getMultiverseId());
                     break;
                 }
                 case Language.Italian: {
                     initialValues.put(KEY_NAME_ITALIAN, fp.getName());
+                    initialValues.put(KEY_NAME_NO_ACCENT_ITALIAN, removeAccentMarks(fp.getName()));
                     initialValues.put(KEY_MULTIVERSEID_ITALIAN, fp.getMultiverseId());
                     break;
                 }
@@ -1553,6 +1698,7 @@ public class CardDbAdapter {
                 }
                 case Language.Portuguese_Brazil: {
                     initialValues.put(KEY_NAME_PORTUGUESE_BRAZIL, fp.getName());
+                    initialValues.put(KEY_NAME_NO_ACCENT_PORTUGUESE_BRAZIL, removeAccentMarks(fp.getName()));
                     initialValues.put(KEY_MULTIVERSEID_PORTUGUESE_BRAZIL, fp.getMultiverseId());
                     break;
                 }
@@ -1563,6 +1709,7 @@ public class CardDbAdapter {
                 }
                 case Language.Spanish: {
                     initialValues.put(KEY_NAME_SPANISH, fp.getName());
+                    initialValues.put(KEY_NAME_NO_ACCENT_SPANISH, removeAccentMarks(fp.getName()));
                     initialValues.put(KEY_MULTIVERSEID_SPANISH, fp.getMultiverseId());
                     break;
                 }
@@ -1580,6 +1727,8 @@ public class CardDbAdapter {
     /**
      * I messed up with Duel Deck Anthologies. Each deck should have had its own set code, rather
      * than grouping them all together. This function fixes any saved cards when loaded.
+     * <p>
+     * TODO online only pref
      *
      * @param name     The name of the card to get the correct set code for
      * @param setCode  The incorrect set code (i.e. DD3)
@@ -1598,6 +1747,7 @@ public class CardDbAdapter {
                             " WHERE (" + KEY_NAME + " = " + sanitizeString(name, false) +
                             " AND " + KEY_SET + " LIKE " + sanitizeString(setCode + "%", false) + ")";
 
+            FamiliarLogger.logRawQuery(sql, null, new Throwable().getStackTrace()[0].getMethodName());
             cursor = database.rawQuery(sql, null);
             if (cursor != null && cursor.getCount() > 0) {
                 cursor.moveToFirst();
@@ -1605,7 +1755,7 @@ public class CardDbAdapter {
             } else {
                 return setCode;
             }
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
         } finally {
             if (null != cursor) {
@@ -1627,13 +1777,15 @@ public class CardDbAdapter {
         try {
             database.delete(DATABASE_TABLE_CARDS, KEY_SET + " = " + sanitizeString(setCode, false), null);
             database.delete(DATABASE_TABLE_SETS, KEY_CODE + " = " + sanitizeString(setCode, false), null);
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
         }
     }
 
     /**
      * Given a Cursor pointed at a card, return the full type line (sub - super) for that card.
+     * <p>
+     * TODO online only pref
      *
      * @param cCardById The cursor pointing to a card
      * @return A String with the full type line
@@ -1688,8 +1840,9 @@ public class CardDbAdapter {
                     " FROM " + DATABASE_TABLE_BANNED_CARDS +
                     " WHERE " + KEY_FORMAT + " = '" + format + "'" +
                     " GROUP BY " + KEY_LEGALITY;
+            FamiliarLogger.logRawQuery(sql, null, new Throwable().getStackTrace()[0].getMethodName());
             return mDb.rawQuery(sql, null);
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
         }
     }
@@ -1713,16 +1866,15 @@ public class CardDbAdapter {
             /* The new way (single query per type, should be much faster) - Alex */
             String sql = "SELECT COALESCE(CASE ";
 
-            /* First coalesce logic, checks the card against ILLEGAL_SETS */
-            sql += "(SELECT " + KEY_SET
-                    + " FROM " + DATABASE_TABLE_CARDS
-                    + " WHERE " + KEY_NAME + " = " + mCardName + ")";
-            StringBuilder sqlBuilder = new StringBuilder(sql);
-            for (String illegalSet : ILLEGAL_SETS) {
-                sqlBuilder.append("WHEN '").append(illegalSet).append("' THEN 1 ");
-            }
-            sql = sqlBuilder.toString();
-            sql += "ELSE NULL END,";
+            /* First coalesce logic, checks the card for a silver border */
+            sql += "(SELECT 1 FROM " +
+                    DATABASE_TABLE_CARDS + " JOIN " + DATABASE_TABLE_SETS + " ON " +
+                    DATABASE_TABLE_SETS + "." + KEY_CODE + " = " + DATABASE_TABLE_CARDS + "." + KEY_SET +
+                    " WHERE " +
+                    DATABASE_TABLE_CARDS + "." + KEY_NAME + " = " + mCardName +
+                    " AND " +
+                    DATABASE_TABLE_SETS + "." + KEY_BORDER_COLOR + " != " + "\"Silver\")";
+            sql += " WHEN 1 THEN NULL ELSE 1 END,";
 
             /* Second coalesce logic, check card against legal sets */
             sql += "CASE (" +
@@ -1730,15 +1882,13 @@ public class CardDbAdapter {
                     " FROM " + DATABASE_TABLE_CARDS + " c INNER JOIN " + DATABASE_TABLE_LEGAL_SETS + " ls ON ls." + KEY_SET + " = c." + KEY_SET +
                     " WHERE ls." + KEY_FORMAT + " = " + format +
                     " AND c." + KEY_NAME + " = " + mCardName;
-            /* If the format is pauper, restrict to commons */
-            if ("'Pauper'".equals(format)) {
-                sql += " AND c." + KEY_RARITY + " = " + ((int) 'C');
-            }
             sql += ")";
             sql += "  WHEN 1 THEN NULL ELSE CASE" +
                     " WHEN " + format + " = 'Legacy' THEN NULL" +
                     " WHEN " + format + " = 'Vintage' THEN NULL" +
                     " WHEN " + format + " = 'Commander' THEN NULL" +
+                    " WHEN " + format + " = 'Pauper' THEN NULL" +
+                    " WHEN " + format + " = 'Reserved List' THEN NULL" +
                     " ELSE 1";
             sql += " END END,";
 
@@ -1748,14 +1898,24 @@ public class CardDbAdapter {
                     " WHERE " + KEY_NAME + " = " + mCardName +
                     " AND " + KEY_FORMAT + " = " + format + "),";
 
+            if ("'Pauper'".equals(format)) {
+                /* Fourth coalesce logic, check card's pauper legality*/
+                sql += " CASE WHEN (" +
+                        " SELECT " + KEY_SET +
+                        " FROM " + DATABASE_TABLE_CARDS +
+                        " WHERE " + KEY_NAME + " = " + mCardName +
+                        " AND " + KEY_RARITY + " = " + ((int) 'C') +
+                        " ) IS NULL THEN 1 ELSE NULL END,";
+            }
             /* Finish the coalesce with a 0 */
             sql += "0) AS " + KEY_LEGALITY;
 
+            FamiliarLogger.logRawQuery(sql, null, new Throwable().getStackTrace()[0].getMethodName());
             c = mDb.rawQuery(sql, null);
 
             c.moveToFirst();
             return c.getInt(c.getColumnIndex(KEY_LEGALITY));
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
         } finally {
             if (null != c) {
@@ -1788,6 +1948,7 @@ public class CardDbAdapter {
         initialValues.put(KEY_NAME_TCGPLAYER, set.mName_tcgp);
         initialValues.put(KEY_ONLINE_ONLY, set.mIsOnlineOnly);
         initialValues.put(KEY_BORDER_COLOR, set.mBorderColor);
+        initialValues.put(KEY_SET_TYPE, set.mType);
 
         mDb.insert(DATABASE_TABLE_SETS, null, initialValues);
     }
@@ -1806,7 +1967,7 @@ public class CardDbAdapter {
             ALL_SET_DATA_KEYS.toArray(allSetDataKeys);
             return sqLiteDatabase.query(DATABASE_TABLE_SETS, allSetDataKeys, null,
                     null, null, null, KEY_DATE + " DESC");
-        } catch (SQLiteException | IllegalStateException | NullPointerException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException | NullPointerException e) {
             throw new FamiliarDbException(e);
         }
     }
@@ -1820,18 +1981,12 @@ public class CardDbAdapter {
      * @throws FamiliarDbException If something goes wrong
      */
     public static String getCodeMtgi(String code, SQLiteDatabase mDb) throws FamiliarDbException {
-        Cursor cursor = null;
-        try {
-            cursor = mDb.query(DATABASE_TABLE_SETS, new String[]{KEY_CODE_MTGI},
-                    KEY_CODE + "=\"" + code + "\"", null, null, null, null);
+        try (Cursor cursor = mDb.query(DATABASE_TABLE_SETS, new String[]{KEY_CODE_MTGI},
+                KEY_CODE + "=\"" + code + "\"", null, null, null, null)) {
             cursor.moveToFirst();
             return cursor.getString(cursor.getColumnIndex(KEY_CODE_MTGI));
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
-        } finally {
-            if (null != cursor) {
-                cursor.close();
-            }
         }
     }
 
@@ -1846,21 +2001,17 @@ public class CardDbAdapter {
     public static String getSetNameFromCode(String setCode, SQLiteDatabase database)
             throws FamiliarDbException {
 
-        String columns[] = new String[]{KEY_NAME};
-        Cursor c = null;
-        try {
-            c = database.query(true, DATABASE_TABLE_SETS, columns, KEY_CODE
-                    + "=\"" + setCode + "\"", null, null, null, KEY_NAME, null);
+        String[] columns = new String[]{KEY_NAME};
+        FamiliarLogger.logQuery(true, DATABASE_TABLE_SETS, columns, KEY_CODE
+                + "=\"" + setCode + "\"", null, null, null, KEY_NAME, null, new Throwable().getStackTrace()[0].getMethodName());
+        try (Cursor c = database.query(true, DATABASE_TABLE_SETS, columns, KEY_CODE
+                + "=\"" + setCode + "\"", null, null, null, KEY_NAME, null)) {
             if (c != null && c.getCount() > 0) {
                 c.moveToFirst();
                 return c.getString(c.getColumnIndex(KEY_NAME));
             } else return "";
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
-        } finally {
-            if (null != c) {
-                c.close();
-            }
         }
     }
 
@@ -1872,23 +2023,20 @@ public class CardDbAdapter {
      * @return true if the set is online only, false otherwise
      */
     public static boolean isOnlineOnly(String setCode, SQLiteDatabase database) throws FamiliarDbException {
-        String columns[] = new String[]{KEY_ONLINE_ONLY};
-        Cursor c = null;
-        try {
-            c = database.query(true, DATABASE_TABLE_SETS, columns, KEY_CODE
-                    + "=\"" + setCode + "\"", null, null, null, null, null);
+        String[] columns = new String[]{KEY_ONLINE_ONLY};
+        FamiliarLogger.logQuery(true, DATABASE_TABLE_SETS, columns, KEY_CODE
+                        + "=\"" + setCode + "\"", null, null, null, null, null,
+                new Throwable().getStackTrace()[0].getMethodName());
+        try (Cursor c = database.query(true, DATABASE_TABLE_SETS, columns, KEY_CODE
+                + "=\"" + setCode + "\"", null, null, null, null, null)) {
 
             if (c != null && c.getCount() > 0) {
                 c.moveToFirst();
                 return (1 == c.getInt(c.getColumnIndex(KEY_ONLINE_ONLY)));
             }
             return false;
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
-        } finally {
-            if (null != c) {
-                c.close();
-            }
         }
     }
 
@@ -1906,6 +2054,7 @@ public class CardDbAdapter {
             String sql = "SELECT " + KEY_NAME_TCGPLAYER +
                     " FROM " + DATABASE_TABLE_SETS +
                     " WHERE " + KEY_CODE + " = " + sanitizeString(setCode, false) + ";";
+            FamiliarLogger.logRawQuery(sql, null, new Throwable().getStackTrace()[0].getMethodName());
             c = mDb.rawQuery(sql, null);
             c.moveToFirst();
 
@@ -1914,7 +2063,7 @@ public class CardDbAdapter {
                 return "";
             }
             return c.getString(c.getColumnIndex(KEY_NAME_TCGPLAYER));
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
         } finally {
             if (null != c) {
@@ -1993,6 +2142,43 @@ public class CardDbAdapter {
         }
     }
 
+    /**
+     * @param database The database to query with
+     * @return A list of all the sets which do not have foils (or are only foil)
+     * @throws FamiliarDbException If something goes terribly wrong
+     */
+    public static ArrayList<String> getNonFoilSets(SQLiteDatabase database) throws FamiliarDbException {
+        Cursor c = null;
+        ArrayList<String> nonFoilSets = new ArrayList<>();
+        try {
+            String sql = "SELECT " + KEY_CODE +
+                    " FROM " + DATABASE_TABLE_SETS +
+                    " WHERE " + KEY_CAN_BE_FOIL + " = 0;";
+            FamiliarLogger.logRawQuery(sql, null, new Throwable().getStackTrace()[0].getMethodName());
+            c = database.rawQuery(sql, null);
+            c.moveToFirst();
+
+            /* Some users had this cursor come up empty. I couldn't replicate. This is safe */
+            if (c.getCount() == 0) {
+                return nonFoilSets;
+            }
+
+            c.moveToFirst();
+            while (!c.isAfterLast()) {
+                nonFoilSets.add(c.getString(c.getColumnIndex(KEY_CODE)));
+                c.moveToNext();
+            }
+
+            return nonFoilSets;
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
+            throw new FamiliarDbException(e);
+        } finally {
+            if (null != c) {
+                c.close();
+            }
+        }
+    }
+
     ////////////////////////////////////////////////////////////////////////////////////////////////
     //                                                                                            //
     //                             DATABASE_TABLE_LEGAL_SETS Functions                            //
@@ -2028,6 +2214,7 @@ public class CardDbAdapter {
                     "SELECT " + KEY_CAN_BE_FOIL +
                             " FROM " + DATABASE_TABLE_SETS +
                             " WHERE " + KEY_CODE + " = \"" + setCode + "\"";
+            FamiliarLogger.logRawQuery(sql, null, new Throwable().getStackTrace()[0].getMethodName());
             c = mDb.rawQuery(sql, null);
 
             /* Check if the cursor returned any values first */
@@ -2038,7 +2225,7 @@ public class CardDbAdapter {
             /* Then check if the set contains foils */
             c.moveToFirst();
             return 0 != c.getInt(c.getColumnIndex(KEY_CAN_BE_FOIL));
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
         } finally {
             if (null != c) {
@@ -2062,6 +2249,7 @@ public class CardDbAdapter {
                     "SELECT " + KEY_CODE +
                             " FROM " + DATABASE_TABLE_SETS +
                             " WHERE " + KEY_CAN_BE_FOIL + " = 1";
+            FamiliarLogger.logRawQuery(sql, null, new Throwable().getStackTrace()[0].getMethodName());
             c = mDb.rawQuery(sql, null);
             c.moveToFirst();
             while (!c.isAfterLast()) {
@@ -2069,7 +2257,7 @@ public class CardDbAdapter {
                 c.moveToNext();
             }
             return foilSets;
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
         } finally {
             if (null != c) {
@@ -2093,8 +2281,9 @@ public class CardDbAdapter {
                     " FROM (" + DATABASE_TABLE_LEGAL_SETS + " JOIN " + DATABASE_TABLE_SETS +
                     " ON " + DATABASE_TABLE_LEGAL_SETS + "." + KEY_SET + " = " + DATABASE_TABLE_SETS + "." + KEY_CODE + ")" +
                     " WHERE " + DATABASE_TABLE_LEGAL_SETS + "." + KEY_FORMAT + " = '" + format + "'";
+            FamiliarLogger.logRawQuery(sql, null, new Throwable().getStackTrace()[0].getMethodName());
             return mDb.rawQuery(sql, null);
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
         }
     }
@@ -2130,7 +2319,7 @@ public class CardDbAdapter {
             mDb.execSQL(DATABASE_CREATE_FORMATS);
             mDb.execSQL(DATABASE_CREATE_LEGAL_SETS);
             mDb.execSQL(DATABASE_CREATE_BANNED_CARDS);
-        } catch (SQLiteException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException e) {
             throw new FamiliarDbException(e);
         }
     }
@@ -2146,7 +2335,7 @@ public class CardDbAdapter {
             mDb.execSQL("DROP TABLE IF EXISTS " + DATABASE_TABLE_FORMATS);
             mDb.execSQL("DROP TABLE IF EXISTS " + DATABASE_TABLE_LEGAL_SETS);
             mDb.execSQL("DROP TABLE IF EXISTS " + DATABASE_TABLE_BANNED_CARDS);
-        } catch (SQLiteException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException e) {
             throw new FamiliarDbException(e);
         }
     }
@@ -2162,7 +2351,7 @@ public class CardDbAdapter {
         try {
             return mDb.query(DATABASE_TABLE_FORMATS, new String[]{KEY_ID,
                     KEY_NAME,}, null, null, null, null, KEY_NAME);
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
         }
     }
@@ -2185,7 +2374,7 @@ public class CardDbAdapter {
         try {
             mDb.execSQL("DROP TABLE IF EXISTS " + DATABASE_TABLE_RULES);
             mDb.execSQL("DROP TABLE IF EXISTS " + DATABASE_TABLE_GLOSSARY);
-        } catch (SQLiteException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException e) {
             throw new FamiliarDbException(e);
         }
     }
@@ -2202,7 +2391,7 @@ public class CardDbAdapter {
         try {
             mDb.execSQL(DATABASE_CREATE_RULES);
             mDb.execSQL(DATABASE_CREATE_GLOSSARY);
-        } catch (SQLiteException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException e) {
             throw new FamiliarDbException(e);
         }
     }
@@ -2223,23 +2412,26 @@ public class CardDbAdapter {
                 /* No category specified; return the main categories */
                 String sql = "SELECT * FROM " + DATABASE_TABLE_RULES
                         + " WHERE " + KEY_SUBCATEGORY + " = -1";
+                FamiliarLogger.logRawQuery(sql, null, new Throwable().getStackTrace()[0].getMethodName());
                 return mDb.rawQuery(sql, null);
             } else if (subcategory == -1) {
                 /* No subcategory specified; return the subcategories under the given category */
                 String sql = "SELECT * FROM " + DATABASE_TABLE_RULES +
-                        " WHERE " + KEY_CATEGORY + " = " + String.valueOf(category) +
+                        " WHERE " + KEY_CATEGORY + " = " + category +
                         " AND " + KEY_SUBCATEGORY + " > -1" +
                         " AND " + KEY_ENTRY + " IS NULL";
+                FamiliarLogger.logRawQuery(sql, null, new Throwable().getStackTrace()[0].getMethodName());
                 return mDb.rawQuery(sql, null);
             } else {
                 /* Both specified; return the rules under the given subcategory */
                 String sql = "SELECT * FROM " + DATABASE_TABLE_RULES +
-                        " WHERE " + KEY_CATEGORY + " = " + String.valueOf(category) +
-                        " AND " + KEY_SUBCATEGORY + " = " + String.valueOf(subcategory) +
+                        " WHERE " + KEY_CATEGORY + " = " + category +
+                        " AND " + KEY_SUBCATEGORY + " = " + subcategory +
                         " AND " + KEY_ENTRY + " IS NOT NULL";
+                FamiliarLogger.logRawQuery(sql, null, new Throwable().getStackTrace()[0].getMethodName());
                 return mDb.rawQuery(sql, null);
             }
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
         }
     }
@@ -2268,6 +2460,7 @@ public class CardDbAdapter {
                     String sql = "SELECT * FROM " + DATABASE_TABLE_RULES
                             + " WHERE " + KEY_RULE_TEXT + " LIKE " + keyword
                             + " AND " + KEY_ENTRY + " IS NOT NULL";
+                    FamiliarLogger.logRawQuery(sql, null, new Throwable().getStackTrace()[0].getMethodName());
                     return mDb.rawQuery(sql, null);
                 } else if (subcategory == -1) {
                     /* No subcategory; we're searching from a category page, so
@@ -2275,7 +2468,8 @@ public class CardDbAdapter {
                     String sql = "SELECT * FROM " + DATABASE_TABLE_RULES
                             + " WHERE " + KEY_RULE_TEXT + " LIKE " + keyword
                             + " AND " + KEY_ENTRY + " IS NOT NULL"
-                            + " AND " + KEY_CATEGORY + " = " + String.valueOf(category);
+                            + " AND " + KEY_CATEGORY + " = " + category;
+                    FamiliarLogger.logRawQuery(sql, null, new Throwable().getStackTrace()[0].getMethodName());
                     return mDb.rawQuery(sql, null);
                 } else {
                     /* We're searching within a subcategory, so restrict within
@@ -2283,13 +2477,14 @@ public class CardDbAdapter {
                     String sql = "SELECT * FROM " + DATABASE_TABLE_RULES
                             + " WHERE " + KEY_RULE_TEXT + " LIKE " + keyword
                             + " AND " + KEY_ENTRY + " IS NOT NULL"
-                            + " AND " + KEY_CATEGORY + " = " + String.valueOf(category)
-                            + " AND " + KEY_SUBCATEGORY + " = " + String.valueOf(subcategory);
+                            + " AND " + KEY_CATEGORY + " = " + category
+                            + " AND " + KEY_SUBCATEGORY + " = " + subcategory;
+                    FamiliarLogger.logRawQuery(sql, null, new Throwable().getStackTrace()[0].getMethodName());
                     return mDb.rawQuery(sql, null);
                 }
             }
             return null;
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
         }
     }
@@ -2311,9 +2506,10 @@ public class CardDbAdapter {
             if (entry != null) {
                 String sql = "SELECT " + KEY_POSITION +
                         " FROM " + DATABASE_TABLE_RULES +
-                        " WHERE " + KEY_CATEGORY + " = " + String.valueOf(category) +
-                        " AND " + KEY_SUBCATEGORY + " = " + String.valueOf(subcategory) +
+                        " WHERE " + KEY_CATEGORY + " = " + category +
+                        " AND " + KEY_SUBCATEGORY + " = " + subcategory +
                         " AND " + KEY_ENTRY + " = " + sanitizeString(entry, false);
+                FamiliarLogger.logRawQuery(sql, null, new Throwable().getStackTrace()[0].getMethodName());
                 c = mDb.rawQuery(sql, null);
                 if (c != null) {
                     c.moveToFirst();
@@ -2321,7 +2517,7 @@ public class CardDbAdapter {
                 }
             }
             return 0;
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
         } finally {
             if (null != c) {
@@ -2345,9 +2541,10 @@ public class CardDbAdapter {
         try {
             String sql = "SELECT " + KEY_RULE_TEXT +
                     " FROM " + DATABASE_TABLE_RULES +
-                    " WHERE " + KEY_CATEGORY + " = " + String.valueOf(category) +
-                    " AND " + KEY_SUBCATEGORY + " = " + String.valueOf(subcategory) +
+                    " WHERE " + KEY_CATEGORY + " = " + category +
+                    " AND " + KEY_SUBCATEGORY + " = " + subcategory +
                     " AND " + KEY_ENTRY + " IS NULL";
+            FamiliarLogger.logRawQuery(sql, null, new Throwable().getStackTrace()[0].getMethodName());
             c = mDb.rawQuery(sql, null);
             if (c != null) {
                 c.moveToFirst();
@@ -2355,7 +2552,7 @@ public class CardDbAdapter {
             } else {
                 return "";
             }
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
         } finally {
             if (null != c) {
@@ -2392,11 +2589,11 @@ public class CardDbAdapter {
         String sql = "INSERT INTO " + DATABASE_TABLE_RULES + " ("
                 + KEY_CATEGORY + ", " + KEY_SUBCATEGORY + ", " + KEY_ENTRY
                 + ", " + KEY_RULE_TEXT + ", " + KEY_POSITION + ") VALUES ("
-                + String.valueOf(category) + ", " + String.valueOf(subcategory)
+                + category + ", " + subcategory
                 + ", " + entry + ", " + text + ", " + positionStr + ");";
         try {
             mDb.execSQL(sql);
-        } catch (SQLiteException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException e) {
             throw new FamiliarDbException(e);
         }
     }
@@ -2424,7 +2621,7 @@ public class CardDbAdapter {
                 + definition + ");";
         try {
             mDb.execSQL(sql);
-        } catch (SQLiteException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException e) {
             throw new FamiliarDbException(e);
         }
     }
@@ -2439,8 +2636,9 @@ public class CardDbAdapter {
     public static Cursor getGlossaryTerms(SQLiteDatabase mDb) throws FamiliarDbException {
         try {
             String sql = "SELECT * FROM " + DATABASE_TABLE_GLOSSARY;
+            FamiliarLogger.logRawQuery(sql, null, new Throwable().getStackTrace()[0].getMethodName());
             return mDb.rawQuery(sql, null);
-        } catch (SQLiteException | IllegalStateException e) {
+        } catch (SQLiteException | CursorIndexOutOfBoundsException | IllegalStateException e) {
             throw new FamiliarDbException(e);
         }
     }
@@ -2459,73 +2657,24 @@ public class CardDbAdapter {
      * @return The sanitized String
      */
     private static String sanitizeString(String input, boolean removeAccentMarks) {
-        if (removeAccentMarks) {
-            return DatabaseUtils.sqlEscapeString(removeAccentMarks(input).trim());
+        if (null == input) {
+            return null;
         }
-        return DatabaseUtils.sqlEscapeString(input.trim());
+        input = input.trim();
+        if (input.isEmpty()) {
+            return input;
+        }
+        if ('[' == input.charAt(0)) {
+            input = input.substring(1);
+        }
+        if (input.endsWith("]")) {
+            input = input.substring(0, input.length() - 1);
+        }
+        if (removeAccentMarks) {
+            return DatabaseUtils.sqlEscapeString(removeAccentMarks(input));
+        }
+        return DatabaseUtils.sqlEscapeString(input);
     }
-
-    private static final char replacements[][] = {
-            {Character.toChars(0xC0)[0], 'A'},
-            {Character.toChars(0xC1)[0], 'A'},
-            {Character.toChars(0xC2)[0], 'A'},
-            {Character.toChars(0xC3)[0], 'A'},
-            {Character.toChars(0xC4)[0], 'A'},
-            {Character.toChars(0xC5)[0], 'A'},
-            //{Character.toChars(0xC6)[0], 'Ae'},
-            {Character.toChars(0xC7)[0], 'C'},
-            {Character.toChars(0xC8)[0], 'E'},
-            {Character.toChars(0xC9)[0], 'E'},
-            {Character.toChars(0xCA)[0], 'E'},
-            {Character.toChars(0xCB)[0], 'E'},
-            {Character.toChars(0xCC)[0], 'I'},
-            {Character.toChars(0xCD)[0], 'I'},
-            {Character.toChars(0xCE)[0], 'I'},
-            {Character.toChars(0xCF)[0], 'I'},
-            {Character.toChars(0xD0)[0], 'D'},
-            {Character.toChars(0xD1)[0], 'N'},
-            {Character.toChars(0xD2)[0], 'O'},
-            {Character.toChars(0xD3)[0], 'O'},
-            {Character.toChars(0xD4)[0], 'O'},
-            {Character.toChars(0xD5)[0], 'O'},
-            {Character.toChars(0xD6)[0], 'O'},
-            {Character.toChars(0xD7)[0], 'x'},
-            {Character.toChars(0xD8)[0], 'O'},
-            {Character.toChars(0xD9)[0], 'U'},
-            {Character.toChars(0xDA)[0], 'U'},
-            {Character.toChars(0xDB)[0], 'U'},
-            {Character.toChars(0xDC)[0], 'U'},
-            {Character.toChars(0xDD)[0], 'Y'},
-            {Character.toChars(0xE0)[0], 'a'},
-            {Character.toChars(0xE1)[0], 'a'},
-            {Character.toChars(0xE2)[0], 'a'},
-            {Character.toChars(0xE3)[0], 'a'},
-            {Character.toChars(0xE4)[0], 'a'},
-            {Character.toChars(0xE5)[0], 'a'},
-            //{Character.toChars(0xE6)[0], 'ae'},
-            {Character.toChars(0xE7)[0], 'c'},
-            {Character.toChars(0xE8)[0], 'e'},
-            {Character.toChars(0xE9)[0], 'e'},
-            {Character.toChars(0xEA)[0], 'e'},
-            {Character.toChars(0xEB)[0], 'e'},
-            {Character.toChars(0xEC)[0], 'i'},
-            {Character.toChars(0xED)[0], 'i'},
-            {Character.toChars(0xEE)[0], 'i'},
-            {Character.toChars(0xEF)[0], 'i'},
-            {Character.toChars(0xF1)[0], 'n'},
-            {Character.toChars(0xF2)[0], 'o'},
-            {Character.toChars(0xF3)[0], 'o'},
-            {Character.toChars(0xF4)[0], 'o'},
-            {Character.toChars(0xF5)[0], 'o'},
-            {Character.toChars(0xF6)[0], 'o'},
-            {Character.toChars(0xF8)[0], 'o'},
-            {Character.toChars(0xF9)[0], 'u'},
-            {Character.toChars(0xFA)[0], 'u'},
-            {Character.toChars(0xFB)[0], 'u'},
-            {Character.toChars(0xFC)[0], 'u'},
-            {Character.toChars(0xFD)[0], 'y'},
-            {Character.toChars(0xFF)[0], 'y'}
-    };
 
     /**
      * Helper function to remove all non-ascii characters with accent marks from a String.
@@ -2534,21 +2683,7 @@ public class CardDbAdapter {
      * @return The accent-less String
      */
     public static String removeAccentMarks(String str) {
-        StringBuilder out = new StringBuilder(str.length());
-        char[] letters = str.toCharArray();
-        for (char letter : letters) {
-            boolean matchFailed = true;
-            for (char[] replacement : replacements) {
-                if (letter == replacement[0]) {
-                    out.append(replacement[1]);
-                    matchFailed = false;
-                    break;
-                }
-            }
-            if (matchFailed) {
-                out.append(letter);
-            }
-        }
-        return out.toString();
+        return StringUtils.stripAccents(str);
+
     }
 }

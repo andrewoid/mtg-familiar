@@ -21,6 +21,7 @@ package com.gelakinetic.mtgfam.helpers.tcgp;
 
 import com.gelakinetic.mtgfam.helpers.tcgp.JsonObjects.AccessToken;
 import com.gelakinetic.mtgfam.helpers.tcgp.JsonObjects.CatalogData;
+import com.gelakinetic.mtgfam.helpers.tcgp.JsonObjects.CategoryGroups;
 import com.gelakinetic.mtgfam.helpers.tcgp.JsonObjects.GetProductInformationOptions;
 import com.gelakinetic.mtgfam.helpers.tcgp.JsonObjects.ProductDetails;
 import com.gelakinetic.mtgfam.helpers.tcgp.JsonObjects.ProductInformation;
@@ -35,7 +36,7 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.ProtocolException;
 import java.net.URL;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 
 public class TcgpApi {
 
@@ -96,7 +97,7 @@ public class TcgpApi {
 
     private static final int CATEGORY_ID_MAGIC = 1;
 
-    private static final String TCGP_VERSION = "v1.9.0";
+    private static final String TCGP_VERSION = "v1.19.0";
     private String mAccessToken;
 
     public void setToken(String tokenStr) {
@@ -167,7 +168,7 @@ public class TcgpApi {
             // Set the body and send the POST
             String payload = "grant_type=client_credentials&client_id=" + publicKey +
                     "&client_secret=" + privateKey;
-            conn.getOutputStream().write(payload.getBytes(Charset.forName("UTF-8")));
+            conn.getOutputStream().write(payload.getBytes(StandardCharsets.UTF_8));
 
             // Get the response stream
             InputStream inStream;
@@ -321,7 +322,7 @@ public class TcgpApi {
             addHeaders(conn);
 
             // Create the params, only adding the set if it isn't null
-            GetProductInformationOptions.NameValuesPair queryParams[];
+            GetProductInformationOptions.NameValuesPair[] queryParams;
             if (null != expansion) {
                 queryParams = new GetProductInformationOptions.NameValuesPair[]{
                         new GetProductInformationOptions.NameValuesPair("ProductName", new String[]{name}),
@@ -334,7 +335,7 @@ public class TcgpApi {
             // Add the information to search by
             GetProductInformationOptions options = new GetProductInformationOptions(queryParams);
             conn.getOutputStream().write(new Gson().toJson(options, GetProductInformationOptions.class)
-                    .getBytes(Charset.forName("UTF-8")));
+                    .getBytes(StandardCharsets.UTF_8));
 
             // Get the response stream. This opens the connection
             InputStream inStream;
@@ -379,7 +380,7 @@ public class TcgpApi {
                 if (stringIds.length() > 0) {
                     stringIds.append(',');
                 }
-                stringIds.append(Long.toString(id));
+                stringIds.append(id);
             }
 
             // Create the connection with default options and headers
@@ -432,7 +433,7 @@ public class TcgpApi {
                 if (stringIds.length() > 0) {
                     stringIds.append(',');
                 }
-                stringIds.append(Long.toString(id));
+                stringIds.append(id);
             }
 
             // Create the connection with default options and headers
@@ -464,6 +465,59 @@ public class TcgpApi {
             inStream.close();
             conn.disconnect();
             return details;
+        }
+        // No access token
+        return null;
+    }
+
+    /**
+     * Return a paged list of all CategoryGroups for Magic expansions
+     *
+     * @param offset The offset for this query. The 0th index in this array will be used and updated
+     * @return The CategoryGroups retrieved from the API
+     * @throws IOException If something goes wrong with the network
+     */
+    public CategoryGroups getCategoryGroups(int[] offset) throws IOException {
+        // Make sure we have an access token first
+        if (null != mAccessToken) {
+
+            // Return 100 items at a time
+            int limit = 100;
+
+            // Create the connection with default options and headers
+            HttpURLConnection conn = (HttpURLConnection) new URL(
+                    "https://api.tcgplayer.com/" + TCGP_VERSION + "/catalog/categories/" + CATEGORY_ID_MAGIC + "/groups" +
+                            "?offset=" + offset[0] + "&limit=" + limit).openConnection();
+            setDefaultOptions(conn, HttpMethod.GET);
+            addHeaders(conn);
+
+            // Get the response stream. This opens the connection
+            InputStream inStream;
+            try {
+                inStream = conn.getInputStream();
+            } catch (FileNotFoundException e) {
+                inStream = conn.getErrorStream();
+                if (null == inStream) {
+                    conn.disconnect();
+                    // Return an empty, not null, object
+                    return new CategoryGroups();
+                }
+            }
+
+            // Parse the json out of the response and save it
+            CategoryGroups groups = new Gson()
+                    .fromJson(new InputStreamReader(inStream), CategoryGroups.class);
+
+            // Clean up
+            inStream.close();
+            conn.disconnect();
+
+            // Increment the offset for the next call
+            if (null != groups.results) {
+                offset[0] += groups.results.length;
+            }
+
+            return groups;
         }
         // No access token
         return null;

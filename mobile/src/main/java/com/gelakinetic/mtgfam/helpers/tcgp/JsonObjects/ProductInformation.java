@@ -21,12 +21,14 @@ package com.gelakinetic.mtgfam.helpers.tcgp.JsonObjects;
 
 @SuppressWarnings("FieldCanBeLocal")
 public class ProductInformation {
-    public final int totalItems;
-    public final boolean success;
-    public final String errors[];
-    public final long results[];
+    private final int totalItems;
+    private final boolean success;
+    public final String[] errors;
+    public final long[] results;
+    private final Object[] aggregates; // TODO what is this?
 
     public ProductInformation() {
+        aggregates = new Object[]{};
         totalItems = 0;
         success = false;
         errors = new String[]{};

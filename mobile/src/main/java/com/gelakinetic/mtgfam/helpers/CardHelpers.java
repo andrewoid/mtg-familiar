@@ -23,6 +23,7 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.Dialog;
 import android.database.Cursor;
+import android.database.CursorIndexOutOfBoundsException;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
 import android.os.Bundle;
@@ -53,6 +54,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -80,7 +82,7 @@ public class CardHelpers {
         final Activity activity = fragment.getActivity();
 
         /* Create the custom view */
-        @SuppressLint("InflateParams") View customView = fragment.getActivity().getLayoutInflater()
+        @SuppressLint("InflateParams") View customView = Objects.requireNonNull(fragment.getActivity()).getLayoutInflater()
                 .inflate(R.layout.wishlist_dialog, null, false);
         assert customView != null;
 
@@ -106,7 +108,7 @@ public class CardHelpers {
                 ArrayList<MtgCard> wishlist = WishlistHelpers.ReadWishlist(activity, false);
                 targetNumberOfs = WishlistHelpers.getTargetNumberOfs(mCardName, wishlist);
                 deckName = "";
-                dialogText = activity.getString(R.string.wishlist_edit_dialog_title_end);
+                dialogText = Objects.requireNonNull(activity).getString(R.string.wishlist_edit_dialog_title_end);
             } else {
                 /* Right now only WishlistDialogFragment and DecklistDialogFragment call this, so
                  * obviously now it is the decklist */
@@ -119,7 +121,7 @@ public class CardHelpers {
                 ArrayList<MtgCard> decklist =
                         DecklistHelpers.ReadDecklist(activity, deckName + DecklistFragment.DECK_EXTENSION, false);
                 targetNumberOfs = DecklistHelpers.getTargetNumberOfs(mCardName, decklist, isSideboard);
-                dialogText = activity.getString(R.string.decklist_edit_dialog_title_end);
+                dialogText = Objects.requireNonNull(activity).getString(R.string.decklist_edit_dialog_title_end);
             }
         } catch (FamiliarDbException e) {
             return null;
@@ -143,41 +145,60 @@ public class CardHelpers {
                     CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_SET,
                     CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_RARITY,
                     CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_NUMBER,
-                    CardDbAdapter.DATABASE_TABLE_SETS + "." + CardDbAdapter.KEY_NAME), true, false, db);
+                    CardDbAdapter.DATABASE_TABLE_SETS + "." + CardDbAdapter.KEY_NAME), true, false, false, db);
 
-            Set<String> foilSets;
-            foilSets = CardDbAdapter.getFoilSets(db);
+            Set<String> foilSets = CardDbAdapter.getFoilSets(db);
 
             /* For each card, add it to the wishlist view */
             while (!cards.isAfterLast()) {
                 String setCode = cards.getString(cards.getColumnIndex(CardDbAdapter.KEY_SET));
                 String setName = cards.getString(cards.getColumnIndex(CardDbAdapter.KEY_NAME));
+                char rarity = (char) cards.getInt(cards.getColumnIndex(CardDbAdapter.KEY_RARITY));
 
-                /* Inflate a row and fill it with stuff */
-                View listDialogRow = createDialogRow(
-                        fragment,
-                        setName,
-                        targetCardNumberOfs.get(setCode),
-                        false,
-                        linearLayout);
-                linearLayout.addView(listDialogRow);
-                potentialSetCodes.add(setCode);
-
-                /* If this card has a foil version, add that too */
-                if (foilSets.contains(setCode)) {
-                    View wishlistRowFoil = createDialogRow(
+                if (targetFoilCardNumberOfs.containsKey(setCode) && !foilSets.contains(setCode)) {
+                    // The card is foil, but the set isn't. This happens for foil-only sets like Masterpieces
+                    // Add a non-foil row
+                    View wishlistRow = createDialogRow(
                             fragment,
                             setName,
+                            setCode,
+                            rarity,
                             targetFoilCardNumberOfs.get(setCode),
-                            true,
+                            false,
                             linearLayout);
-                    linearLayout.addView(wishlistRowFoil);
+                    linearLayout.addView(wishlistRow);
                     potentialSetCodes.add(setCode);
+                } else {
+                    /* Inflate a row and fill it with stuff */
+                    View listDialogRow = createDialogRow(
+                            fragment,
+                            setName,
+                            setCode,
+                            rarity,
+                            targetCardNumberOfs.get(setCode),
+                            false,
+                            linearLayout);
+                    linearLayout.addView(listDialogRow);
+                    potentialSetCodes.add(setCode);
+
+                    /* If this card has a foil version, add that too */
+                    if (foilSets.contains(setCode)) {
+                        View wishlistRowFoil = createDialogRow(
+                                fragment,
+                                setName,
+                                setCode,
+                                rarity,
+                                targetFoilCardNumberOfs.get(setCode),
+                                true,
+                                linearLayout);
+                        linearLayout.addView(wishlistRowFoil);
+                        potentialSetCodes.add(setCode);
+                    }
                 }
 
                 cards.moveToNext();
             }
-        } catch (SQLiteException | FamiliarDbException e) {
+        } catch (SQLiteException | FamiliarDbException | CursorIndexOutOfBoundsException e) {
             return null;
         } finally {
             if (null != cards) {
@@ -189,13 +210,13 @@ public class CardHelpers {
         MaterialDialog.SingleButtonCallback onPositiveCallback = (dialog, which) -> {
 
             ArrayList<MtgCard> list;
+            ArrayList<String> nonFoilSets;
 
             try {
                 if (isWishlistDialog || isCardViewDialog || isResultListDialog) {
                     /* Read the wishlist */
-                    list = new ArrayList<>();
                     ArrayList<MtgCard> wishlist = WishlistHelpers.ReadWishlist(activity, false);
-                    list.addAll(wishlist);
+                    list = new ArrayList<>(wishlist);
                 } else {
                     list = DecklistHelpers.ReadDecklist(
                             activity,
@@ -205,6 +226,16 @@ public class CardHelpers {
                 }
             } catch (FamiliarDbException e) {
                 return;
+            }
+
+            FamiliarDbHandle handle = new FamiliarDbHandle();
+            try {
+                SQLiteDatabase database = DatabaseManager.openDatabase(activity, false, handle);
+                nonFoilSets = CardDbAdapter.getNonFoilSets(database);
+            } catch (SQLiteException | FamiliarDbException | IllegalStateException ignored) {
+                nonFoilSets = new ArrayList<>();
+            } finally {
+                DatabaseManager.closeDatabase(activity, handle);
             }
 
             /* Add the cards listed in the dialog to the wishlist */
@@ -222,17 +253,17 @@ public class CardHelpers {
                 } catch (NumberFormatException e) {
                     numberOf = 0;
                 }
-                try {
-                    MtgCard card = new MtgCard(mCardName, potentialSetCodes.get(i), isFoil, numberOf, isSideboard);
+                MtgCard card = new MtgCard(mCardName, potentialSetCodes.get(i), isFoil, numberOf, isSideboard);
 
-                    /* Look through the wishlist for each card, set the numberOf or remove
-                     * it if it exists, or add the card if it doesn't */
-                    boolean added = false;
-                    for (int j = 0; j < list.size(); j++) {
-                        if (card.getName().equals(list.get(j).getName())
-                                && card.isSideboard() == list.get(j).isSideboard()
-                                && card.getExpansion().equals(list.get(j).getExpansion())
-                                && card.mIsFoil == list.get(j).mIsFoil) {
+                /* Look through the wishlist for each card, set the numberOf or remove
+                 * it if it exists, or add the card if it doesn't */
+                boolean added = false;
+                for (int j = 0; j < list.size(); j++) {
+                    if (card.getName().equals(list.get(j).getName())
+                            && card.isSideboard() == list.get(j).isSideboard()
+                            && card.getExpansion().equals(list.get(j).getExpansion())) {
+                        if (card.mIsFoil == list.get(j).mIsFoil ||
+                                nonFoilSets.contains(card.getExpansion())) {
                             if (card.mNumberOf == 0) {
                                 list.remove(j);
                                 j--;
@@ -242,31 +273,25 @@ public class CardHelpers {
                             added = true;
                         }
                     }
-                    if (!added && card.mNumberOf > 0) {
-                        list.add(card);
-                    }
-                } catch (InstantiationException e) {
-                    /* Eat it */
+                }
+                if (!added && card.mNumberOf > 0) {
+                    list.add(card);
                 }
             }
 
             if (isWishlistDialog || isCardViewDialog || isResultListDialog) {
-                ArrayList<MtgCard> wishlist = new ArrayList<>();
                 /* Turn it back in to a plain ArrayList */
-                wishlist.addAll(list);
+                ArrayList<MtgCard> wishlist = new ArrayList<>(list);
                 /* Write the wishlist */
                 WishlistHelpers.WriteWishlist(fragment.getActivity(), wishlist);
                 /* notify the fragment of a change in the wishlist */
-                fragment.onWishlistChanged(mCardName); //
             } else {
                 DecklistHelpers.WriteDecklist(
                         activity,
                         list,
-                        deckName + DecklistFragment.DECK_EXTENSION
-                );
-                fragment.onWishlistChanged(mCardName);
-
+                        deckName + DecklistFragment.DECK_EXTENSION);
             }
+            fragment.onWishlistChanged(mCardName);
         };
 
         /* If the button should be shown, show it and attach a listener */
@@ -328,14 +353,17 @@ public class CardHelpers {
     private static View createDialogRow(
             FamiliarFragment fragment,
             String setName,
+            String setCode,
+            char rarity,
             String targetCardNumberOf,
             boolean isFoil,
             ViewGroup viewGroup) {
 
-        View dialogRow = fragment.getActivity().getLayoutInflater()
+        View dialogRow = Objects.requireNonNull(fragment.getActivity()).getLayoutInflater()
                 .inflate(R.layout.wishlist_dialog_row, viewGroup, false);
         assert dialogRow != null;
         ((TextView) dialogRow.findViewById(R.id.cardset)).setText(setName);
+        ExpansionImageHelper.loadExpansionImage(fragment.getContext(), setCode, rarity, dialogRow.findViewById(R.id.cardsetimage), null, ExpansionImageHelper.ExpansionImageSize.LARGE);
         String numberOf = targetCardNumberOf;
         numberOf = numberOf == null ? "0" : numberOf;
         final Button numberButton = dialogRow.findViewById(R.id.number_button);
@@ -455,6 +483,70 @@ public class CardHelpers {
             this.mRarity = isi.mRarity;
         }
 
+        /**
+         * @return The alphabetically first expansion for this CompressedCardInfo
+         */
+        String getFirstExpansion() {
+            String firstExpansion = this.mInfo.get(0).mSet;
+            for (IndividualSetInfo info : this.mInfo) {
+                if (firstExpansion.compareTo(info.mSet) < 1) {
+                    firstExpansion = info.mSet;
+                }
+            }
+            return firstExpansion;
+        }
+
+        /**
+         * @return The rarity of the rarest card in this CompressedCardInfo
+         */
+        char getHighestRarity() {
+            char rarity = '\0';
+            for (IndividualSetInfo info : this.mInfo) {
+                switch (info.mRarity) {
+                    case 'c':
+                    case 'C':
+                        if ('\0' == rarity) {
+                            rarity = 'C';
+                        }
+                        break;
+                    case 'u':
+                    case 'U':
+                        if ('\0' == rarity ||
+                                'C' == rarity) {
+                            rarity = 'U';
+                        }
+                        break;
+                    case 'r':
+                    case 'R':
+                        if ('\0' == rarity ||
+                                'C' == rarity ||
+                                'U' == rarity) {
+                            rarity = 'R';
+                        }
+                        break;
+                    case 't':
+                    case 'T':
+                        if ('\0' == rarity ||
+                                'C' == rarity ||
+                                'U' == rarity ||
+                                'R' == rarity) {
+                            rarity = 'T';
+                        }
+                        break;
+                    case 'm':
+                    case 'M':
+                        if ('\0' == rarity ||
+                                'C' == rarity ||
+                                'U' == rarity ||
+                                'R' == rarity ||
+                                'T' == rarity) {
+                            rarity = 'M';
+                        }
+                        break;
+                }
+            }
+            return rarity;
+        }
     }
 
     /**
@@ -492,7 +584,6 @@ public class CardHelpers {
             implements Comparator<CompressedDecklistInfo>, Serializable {
 
         private static final String COLORS = "WUBRG";
-        private static final String NON_COLORS = "LAC";
 
         /**
          * Gets what COLORS are in the given string.
@@ -522,21 +613,6 @@ public class CardHelpers {
 
             String cardColors1 = getColors(card1.getColor());
             String cardColors2 = getColors(card2.getColor());
-            int priority1;
-            int priority2;
-            //1. If colorless, perform colorless comparison
-            if (cardColors1.length() + cardColors2.length() == 0) {
-                cardColors1 = card1.getColor();
-                cardColors2 = card2.getColor();
-                for (int i = 0; i < Math.min(cardColors1.length(), cardColors2.length()); i++) {
-                    priority1 = NON_COLORS.indexOf(cardColors1.charAt(i));
-                    priority2 = NON_COLORS.indexOf(cardColors2.charAt(i));
-                    if (priority1 != priority2) {
-                        return priority1 < priority2 ? -1 : 1;
-                    }
-                }
-                return 0;
-            }
             if (cardColors1.length() < cardColors2.length()) {
                 return -1;
             } else if (cardColors1.length() > cardColors2.length()) {
@@ -544,8 +620,8 @@ public class CardHelpers {
             }
             // Else if the same number of COLORS exist, compare based on WUBRG-ness
             for (int i = 0; i < Math.min(cardColors1.length(), cardColors2.length()); i++) {
-                priority1 = COLORS.indexOf(cardColors1.charAt(i));
-                priority2 = COLORS.indexOf(cardColors2.charAt(i));
+                int priority1 = COLORS.indexOf(cardColors1.charAt(i));
+                int priority2 = COLORS.indexOf(cardColors2.charAt(i));
                 if (priority1 != priority2) {
                     return priority1 < priority2 ? -1 : 1;
                 }

@@ -34,6 +34,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -54,6 +55,7 @@ public class DecklistHelpers {
             String fileName) {
 
         try {
+            fileName = sanitizeFilename(fileName);
             FileOutputStream fos = activity.openFileOutput(fileName, Context.MODE_PRIVATE);
             for (MtgCard m : lDecklist) {
                 String cardString = m.toWishlistString();
@@ -73,13 +75,13 @@ public class DecklistHelpers {
     /**
      * Write the decklist passed as a parameter to the given filename.
      *
-     * @param activity            A context to open the file and pop toasts with
-     * @param mCompressedDecklist The decklist to write to the file
-     * @param fileName            the filename for the decklist
+     * @param activity           A context to open the file and pop toasts with
+     * @param compressedDecklist The decklist to write to the file
+     * @param fileName           the filename for the decklist
      */
     public static void WriteCompressedDecklist(
             Activity activity,
-            ArrayList<CompressedDecklistInfo> mCompressedDecklist,
+            List<CompressedDecklistInfo> compressedDecklist,
             String fileName) {
 
         if (null == activity) {
@@ -87,12 +89,11 @@ public class DecklistHelpers {
         }
         try {
 
-            final String newFileName =
-                    fileName.replaceAll("(\\s)", "_").replaceAll("[^\\w.-]", "_");
+            final String newFileName = sanitizeFilename(fileName);
             FileOutputStream fos = activity.openFileOutput(newFileName, Context.MODE_PRIVATE);
 
             /* For each compressed card, make an MtgCard and write it to the default decklist */
-            for (CompressedDecklistInfo cdi : mCompressedDecklist) {
+            for (CompressedDecklistInfo cdi : compressedDecklist) {
                 if (cdi.getName() != null && !cdi.getName().isEmpty()) {
                     for (CardHelpers.IndividualSetInfo isi : cdi.mInfo) {
                         cdi.applyIndividualInfo(isi);
@@ -115,7 +116,7 @@ public class DecklistHelpers {
     /**
      * Read the decklist from a file and return it as an ArrayList<Pair<MtgCard, Boolean>>.
      *
-     * @param activity A context to open the file and pop toasts with
+     * @param activity     A context to open the file and pop toasts with
      * @param deckName     the name of the deck to load
      * @param loadFullData true to load all card data from the database, false to to just read the file
      * @return The decklist as an ArrayList of MtgCards
@@ -127,7 +128,7 @@ public class DecklistHelpers {
         try {
             String line;
             // Sanitize the deckname before loading in case it was saved improperly on an earlier version of Familiar
-            deckName = deckName.replaceAll("(\\s)", "_").replaceAll("[^\\w.-]", "_");
+            deckName = sanitizeFilename(deckName);
             try (BufferedReader br = new BufferedReader(new InputStreamReader(activity.openFileInput(deckName)))) {
                 boolean isSideboard;
                 /* Read each line as a card, and add them to the ArrayList */
@@ -140,10 +141,9 @@ public class DecklistHelpers {
                         isSideboard = true;
                         line = line.substring(3);
                     }
-                    try {
-                        lDecklist.add(MtgCard.fromWishlistString(line, isSideboard, activity));
-                    } catch (InstantiationException e) {
-                        /* Eat it */
+                    MtgCard card = MtgCard.fromWishlistString(line, isSideboard, activity);
+                    if (null != card) {
+                        lDecklist.add(card);
                     }
                 }
             }
@@ -160,13 +160,17 @@ public class DecklistHelpers {
 
     }
 
+    private static String sanitizeFilename(String deckName) {
+        return deckName.replaceAll("(\\s)", "_").replaceAll("[^\\w.-]", "_");
+    }
+
     public static String getSharableDecklist(
-            ArrayList<CompressedDecklistInfo> mCompressedDecklist,
+            List<CompressedDecklistInfo> compressedDecklist,
             Context ctx) {
 
         StringBuilder readableDecklist = new StringBuilder();
 
-        for (CompressedDecklistInfo cdi : mCompressedDecklist) {
+        for (CompressedDecklistInfo cdi : compressedDecklist) {
             if (null != cdi.header) {
                 readableDecklist.append(cdi.header).append("\r\n");
             } else {

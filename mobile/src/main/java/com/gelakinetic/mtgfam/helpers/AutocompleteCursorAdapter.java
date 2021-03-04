@@ -23,10 +23,6 @@ import android.app.SearchManager;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.v4.app.LoaderManager;
-import android.support.v4.content.CursorLoader;
-import android.support.v4.content.Loader;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.View;
@@ -34,13 +30,17 @@ import android.view.ViewGroup;
 import android.widget.AutoCompleteTextView;
 import android.widget.SimpleCursorAdapter;
 
+import androidx.annotation.NonNull;
+import androidx.loader.app.LoaderManager;
+import androidx.loader.content.CursorLoader;
+import androidx.loader.content.Loader;
+
 import com.gelakinetic.mtgfam.R;
 import com.gelakinetic.mtgfam.fragments.FamiliarFragment;
 import com.gelakinetic.mtgfam.helpers.database.CardDbAdapter;
 import com.gelakinetic.mtgfam.helpers.database.CardSearchProvider;
 
-import org.jetbrains.annotations.NotNull;
-
+import java.util.Objects;
 import java.util.concurrent.RejectedExecutionException;
 
 /**
@@ -72,7 +72,7 @@ public class AutocompleteCursorAdapter extends SimpleCursorAdapter implements Lo
     public AutocompleteCursorAdapter(FamiliarFragment context, String[] from, int[] to, AutoCompleteTextView textView, boolean showArrowhead) {
         super(context.getActivity(), showArrowhead ? R.layout.list_item_1_arrowhead : R.layout.list_item_1, null, from, to, 0);
         mFragment = context;
-        mFragment.getLoaderManager().initLoader(0, null, this);
+        LoaderManager.getInstance(mFragment).initLoader(0, null, this);
         textView.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence charSequence, int i, int i2, int i3) {
@@ -89,7 +89,7 @@ public class AutocompleteCursorAdapter extends SimpleCursorAdapter implements Lo
                 /* Preform a query */
                 mAutocompleteFilter[0] = String.valueOf(editable);
                 try {
-                    mFragment.getLoaderManager().restartLoader(0, null, AutocompleteCursorAdapter.this);
+                    LoaderManager.getInstance(mFragment).restartLoader(0, null, AutocompleteCursorAdapter.this);
                 } catch (RejectedExecutionException e) {
                     // Autocomplete broke, but at least it won't take down the whole app
                 }
@@ -110,7 +110,7 @@ public class AutocompleteCursorAdapter extends SimpleCursorAdapter implements Lo
         /* Now create and return a CursorLoader that will take care of creating a Cursor for the data being displayed.
          */
         String select = "(" + CardDbAdapter.KEY_NAME + ")";
-        return new CursorLoader(mFragment.getActivity(), SEARCH_URI, CARD_NAME_PROJECTION, select, mAutocompleteFilter,
+        return new CursorLoader(Objects.requireNonNull(mFragment.getActivity()), SEARCH_URI, CARD_NAME_PROJECTION, select, mAutocompleteFilter,
                 CardDbAdapter.KEY_NAME + " COLLATE LOCALIZED ASC");
     }
 
@@ -155,7 +155,7 @@ public class AutocompleteCursorAdapter extends SimpleCursorAdapter implements Lo
      * @return a CharSequence representing the value
      */
     @Override
-    public CharSequence convertToString(@NotNull Cursor cursor) {
+    public CharSequence convertToString(@NonNull Cursor cursor) {
         try {
             return cursor.getString(cursor.getColumnIndex(CardDbAdapter.KEY_NAME));
         } catch (Exception e) {

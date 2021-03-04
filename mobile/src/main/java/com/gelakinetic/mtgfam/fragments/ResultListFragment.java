@@ -22,9 +22,7 @@ package com.gelakinetic.mtgfam.fragments;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
-import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -35,11 +33,15 @@ import android.widget.AbsListView;
 import android.widget.ListView;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.fragment.app.FragmentManager;
+
 import com.gelakinetic.mtgfam.FamiliarActivity;
 import com.gelakinetic.mtgfam.R;
 import com.gelakinetic.mtgfam.fragments.dialogs.FamiliarDialogFragment;
 import com.gelakinetic.mtgfam.fragments.dialogs.ResultListDialogFragment;
 import com.gelakinetic.mtgfam.fragments.dialogs.SortOrderDialogFragment;
+import com.gelakinetic.mtgfam.helpers.FamiliarLogger;
 import com.gelakinetic.mtgfam.helpers.PreferenceAdapter;
 import com.gelakinetic.mtgfam.helpers.ResultListAdapter;
 import com.gelakinetic.mtgfam.helpers.SearchCriteria;
@@ -50,6 +52,7 @@ import com.gelakinetic.mtgfam.helpers.database.FamiliarDbException;
 import com.gelakinetic.mtgfam.helpers.database.FamiliarDbHandle;
 
 import java.util.ArrayList;
+import java.util.Objects;
 import java.util.Random;
 
 /**
@@ -58,7 +61,6 @@ import java.util.Random;
 public class ResultListFragment extends FamiliarFragment {
 
     /* Constants for bundled arguments */
-    private static final String CARD_ID = "id";
     public static final String CARD_ID_0 = "id0";
     public static final String CARD_ID_1 = "id1";
     public static final String CARD_ID_2 = "id2";
@@ -208,55 +210,59 @@ public class ResultListFragment extends FamiliarFragment {
         /* Open up the database, search for stuff */
         try {
             mDatabase = DatabaseManager.openDatabase(getActivity(), false, mDbHandle);
-            doSearch(this.getArguments(), mDatabase);
+            doSearch(Objects.requireNonNull(this.getArguments()), mDatabase);
         } catch (SQLiteException | FamiliarDbException e) {
             handleFamiliarDbException(true);
             return myFragmentView;
         }
 
         /* Sub-optimal, but KitKat is silly */
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            mListView.setOnScrollListener(new ListView.OnScrollListener() {
+        mListView.setOnScrollListener(new ListView.OnScrollListener() {
 
-                @Override
-                public void onScrollStateChanged(AbsListView absListView, int scrollState) {
-                    switch (scrollState) {
-                        case AbsListView.OnScrollListener.SCROLL_STATE_IDLE:
-                            absListView.setFastScrollAlwaysVisible(false);
-                            break;
-                        case AbsListView.OnScrollListener.SCROLL_STATE_FLING:
-                            absListView.setFastScrollAlwaysVisible(true);
-                            break;
-                        default:
-                            break;
-                    }
+            @Override
+            public void onScrollStateChanged(AbsListView absListView, int scrollState) {
+                switch (scrollState) {
+                    case AbsListView.OnScrollListener.SCROLL_STATE_IDLE:
+                        absListView.setFastScrollAlwaysVisible(false);
+                        break;
+                    case AbsListView.OnScrollListener.SCROLL_STATE_FLING:
+                        absListView.setFastScrollAlwaysVisible(true);
+                        break;
+                    default:
+                        break;
                 }
+            }
 
-                @Override
-                public void onScroll(AbsListView absListView, int i, int i2, int i3) {
+            @Override
+            public void onScroll(AbsListView absListView, int i, int i2, int i3) {
 
-                }
-            });
+            }
+        });
+
+        if (mCursor == null) {
+            FamiliarLogger.appendToLogFile(new StringBuilder("Null cursor"), "onCreateView");
+        } else {
+            FamiliarLogger.appendToLogFile(new StringBuilder("Cursor Count: ").append(mCursor.getCount()), "onCreateView");
         }
-
+        FragmentManager fm = Objects.requireNonNull(getFragmentManager());
         Bundle res = getFamiliarActivity().getFragmentResults();
         if (res != null) {
-            if (mCursor.getCount() == 1) {
-                /* Jump back past the result list (it wasn't displayed because this card is a singleton) */
-                if (!getActivity().isTaskRoot()) {
+            if (null == mCursor || mCursor.getCount() == 1) {
+                /* Jump back past the result list (it wasn't displayed because this card is a singleton)
+                 * or maybe the cursor was null for no good reason */
+                if (!Objects.requireNonNull(getActivity()).isTaskRoot()) {
                     getActivity().finish();
-                } else {
-                    getFragmentManager().popBackStack();
+                } else if (!fm.isStateSaved()) {
+                    fm.popBackStack();
                 }
             }
         } else if (this.isAdded()) {
             if (mCursor == null || mCursor.getCount() == 0) {
-                SnackbarWrapper.makeAndShowText(this.getActivity(), R.string.search_toast_no_results, SnackbarWrapper.LENGTH_SHORT
-                );
-                if (!getActivity().isTaskRoot()) {
+                SnackbarWrapper.makeAndShowText(this.getActivity(), R.string.search_toast_no_results, SnackbarWrapper.LENGTH_SHORT);
+                if (!Objects.requireNonNull(getActivity()).isTaskRoot()) {
                     getActivity().finish();
-                } else {
-                    getFragmentManager().popBackStack();
+                } else if (!fm.isStateSaved()) {
+                    fm.popBackStack();
                 }
             } else if (mCursor.getCount() == 1) {
                 mCursor.moveToFirst();
@@ -284,10 +290,7 @@ public class ResultListFragment extends FamiliarFragment {
 
         mListView.setOnItemLongClickListener((adapterView, view, i, l) -> {
             String cardName = ((TextView) view.findViewById(R.id.card_name)).getText().toString();
-            String cardSet = null;
-            if (view.findViewById(R.id.cardset).getVisibility() == View.VISIBLE) {
-                cardSet = ((TextView) view.findViewById(R.id.cardset)).getText().toString();
-            }
+            String cardSet = ((TextView) view.findViewById(R.id.cardset)).getText().toString();
             showDialog(ResultListDialogFragment.QUICK_ADD, cardName, cardSet);
             return true;
         });
@@ -295,34 +298,20 @@ public class ResultListFragment extends FamiliarFragment {
         return myFragmentView;
     }
 
+    /**
+     * Search the database for cards and store the result in mCursor, a global variable
+     *
+     * @param args     A bundle which may contain card IDs. If it does not, then use
+     *                 PreferenceAdapter.getSearchCriteria() to get parameters to search with
+     * @param database The database to search
+     * @throws FamiliarDbException If there is a database error
+     */
     private void doSearch(Bundle args, SQLiteDatabase database) throws FamiliarDbException {
         long id;
-        /* This is just the multiverse ID, from a TutorCards search */
-        if ((id = args.getLong(CARD_ID)) != 0L) {
-            mCursor = CardDbAdapter.fetchCardByMultiverseId(id, new String[]{
-                    CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_ID,
-                    CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_NAME,
-                    CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_SET,
-                    CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_SUPERTYPE,
-                    CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_SUBTYPE,
-                    CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_RARITY,
-                    CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_MANACOST,
-                    CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_CMC,
-                    CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_POWER,
-                    CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_TOUGHNESS,
-                    CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_LOYALTY,
-                    CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_ABILITY,
-                    CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_FLAVOR,
-                    CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_ARTIST,
-                    CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_NUMBER,
-                    CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_COLOR,
-                    CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_MULTIVERSEID
-            }, database);
-        }
         /* If "id0" exists, then it's three cards and they should be merged
          * Otherwise, do a search with the given criteria
          */
-        else if ((id = args.getLong(CARD_ID_0)) != 0L) {
+        if ((id = args.getLong(CARD_ID_0)) != 0L) {
             long id1 = args.getLong(CARD_ID_1);
             long id2 = args.getLong(CARD_ID_2);
             mCursor = CardDbAdapter.fetchCards(new long[]{id, id1, id2},
@@ -333,15 +322,20 @@ public class ResultListFragment extends FamiliarFragment {
             String[] returnTypes = new String[]{CardDbAdapter.KEY_ID, CardDbAdapter.KEY_NAME, CardDbAdapter.KEY_SET,
                     CardDbAdapter.KEY_RARITY, CardDbAdapter.KEY_MANACOST, CardDbAdapter.KEY_SUPERTYPE, CardDbAdapter.KEY_SUBTYPE,
                     CardDbAdapter.KEY_ABILITY, CardDbAdapter.KEY_POWER, CardDbAdapter.KEY_TOUGHNESS, CardDbAdapter.KEY_LOYALTY,
-                    CardDbAdapter.KEY_NUMBER, CardDbAdapter.KEY_CMC, CardDbAdapter.KEY_COLOR};
+                    CardDbAdapter.KEY_NUMBER, CardDbAdapter.KEY_CMC, CardDbAdapter.KEY_COLOR, CardDbAdapter.KEY_COLOR_IDENTITY};
 
-            SearchCriteria criteria = (SearchCriteria) args.getSerializable(SearchViewFragment.CRITERIA);
+            SearchCriteria criteria = PreferenceAdapter.getSearchCriteria(getContext());
             assert criteria != null; /* Because Android Studio */
             boolean consolidate = (criteria.setLogic == CardDbAdapter.MOST_RECENT_PRINTING ||
                     criteria.setLogic == CardDbAdapter.FIRST_PRINTING);
 
             mCursor = CardDbAdapter.Search(criteria, true, returnTypes, consolidate,
                     PreferenceAdapter.getSearchSortOrder(getContext()), database);
+            if (mCursor == null) {
+                FamiliarLogger.appendToLogFile(new StringBuilder("Null cursor"), "doSearch");
+            } else {
+                FamiliarLogger.appendToLogFile(new StringBuilder("Cursor Count: ").append(mCursor.getCount()), "doSearch");
+            }
         }
     }
 
@@ -364,14 +358,13 @@ public class ResultListFragment extends FamiliarFragment {
         if (mCursor != null) {
             ArrayList<String> fromList = new ArrayList<>();
             ArrayList<Integer> toList = new ArrayList<>();
+            // Always get name, set, and rarity. This is for the wishlist quick add
             fromList.add(CardDbAdapter.KEY_NAME);
             toList.add(R.id.card_name);
-            if (PreferenceAdapter.getSetPref(getContext())) {
-                fromList.add(CardDbAdapter.KEY_SET);
-                toList.add(R.id.cardset);
-                fromList.add(CardDbAdapter.KEY_RARITY);
-                toList.add(R.id.rarity);
-            }
+            fromList.add(CardDbAdapter.KEY_SET);
+            toList.add(R.id.cardset);
+            fromList.add(CardDbAdapter.KEY_RARITY);
+            toList.add(R.id.rarity);
             if (PreferenceAdapter.getManaCostPref(getContext())) {
                 fromList.add(CardDbAdapter.KEY_MANACOST);
                 toList.add(R.id.cardcost);
@@ -414,11 +407,12 @@ public class ResultListFragment extends FamiliarFragment {
      */
     private void startCardViewFrag(long id) throws FamiliarDbException {
         try {
+            // TODO don't use bundle?
             Bundle args = new Bundle();
             int cardPosition = 0;
 
             /* Build the array of ids sequentially, make note of the chosen card's position */
-            long cardIds[] = new long[mCursor.getCount()];
+            long[] cardIds = new long[mCursor.getCount()];
             mCursor.moveToFirst();
             for (int i = 0; i < mCursor.getCount(); i++, mCursor.moveToNext()) {
                 cardIds[i] = mCursor.getLong(mCursor.getColumnIndex(CardDbAdapter.KEY_ID));
@@ -450,7 +444,7 @@ public class ResultListFragment extends FamiliarFragment {
             args.putLongArray(CardViewPagerFragment.CARD_ID_ARRAY, cardIds);
             CardViewPagerFragment cardViewPagerFragment = new CardViewPagerFragment();
             startNewFragment(cardViewPagerFragment, args);
-        } catch (IllegalStateException e) {
+        } catch (IllegalStateException | NullPointerException e) {
             throw new FamiliarDbException(e);
         }
     }
@@ -462,7 +456,7 @@ public class ResultListFragment extends FamiliarFragment {
      * @param inflater The inflater to use to inflate the menu
      */
     @Override
-    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
+    public void onCreateOptionsMenu(@NonNull Menu menu, @NonNull MenuInflater inflater) {
         super.onCreateOptionsMenu(menu, inflater);
         inflater.inflate(R.menu.result_list_menu, menu);
     }
@@ -476,20 +470,18 @@ public class ResultListFragment extends FamiliarFragment {
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         /* Handle item selection */
-        switch (item.getItemId()) {
-            case R.id.search_menu_random_search:
-                try {
-                    startCardViewFrag(-1);
-                } catch (SQLiteException | FamiliarDbException e) {
-                    handleFamiliarDbException(true);
-                }
-                return true;
-            case R.id.search_menu_sort: {
-                showDialog(ResultListDialogFragment.DIALOG_SORT, null, null);
-                return true;
+        if (item.getItemId() == R.id.search_menu_random_search) {
+            try {
+                startCardViewFrag(-1);
+            } catch (SQLiteException | FamiliarDbException e) {
+                handleFamiliarDbException(true);
             }
-            default:
-                return super.onOptionsItemSelected(item);
+            return true;
+        } else if (item.getItemId() == R.id.search_menu_sort) {
+            showDialog(ResultListDialogFragment.DIALOG_SORT, null, null);
+            return true;
+        } else {
+            return super.onOptionsItemSelected(item);
         }
     }
 
@@ -538,7 +530,7 @@ public class ResultListFragment extends FamiliarFragment {
             /* Close the old cursor */
             mCursor.close();
             /* Do the search again with the new "order by" options */
-            doSearch(getArguments(), mDatabase);
+            doSearch(Objects.requireNonNull(getArguments()), mDatabase);
             /* Display the newly sorted data */
             fillData();
         } catch (SQLiteException | FamiliarDbException e) {

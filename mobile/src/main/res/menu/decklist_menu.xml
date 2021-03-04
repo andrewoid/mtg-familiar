@@ -1,5 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!--
+<?xml version="1.0" encoding="utf-8"?><!--
   ~ Copyright 2017 Adam Feinstein
   ~
   ~ This file is part of MTG Familiar.
@@ -27,20 +26,24 @@
         android:title="@string/decklist_clear"
         app:showAsAction="ifRoom" />
     <item
-        android:id="@+id/deck_menu_save"
-        android:icon="@drawable/ic_menu_save"
-        android:title="@string/decklist_save"
-        app:showAsAction="ifRoom" />
-    <!-- todo: icon for save as -->
-    <item
-        android:id="@+id/deck_menu_save_as"
-        android:icon="@drawable/ic_menu_save"
-        android:title="@string/decklist_save_as"
+        android:id="@+id/deck_menu_new"
+        android:icon="@drawable/ic_menu_decklist"
+        android:title="@string/decklist_new"
         app:showAsAction="ifRoom" />
     <item
         android:id="@+id/deck_menu_load"
         android:icon="@drawable/ic_menu_folder_open"
         android:title="@string/decklist_load"
+        app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/deck_menu_import"
+        android:icon="@drawable/ic_menu_arrow_down"
+        android:title="@string/decklist_import"
+        app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/deck_menu_save_as"
+        android:icon="@drawable/ic_menu_save"
+        android:title="@string/decklist_save_as"
         app:showAsAction="ifRoom" />
     <item
         android:id="@+id/deck_menu_delete"
@@ -57,6 +60,12 @@
         android:id="@+id/deck_menu_legality"
         android:icon="@drawable/ic_menu_legality"
         android:title="@string/card_view_legality"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/deck_menu_settings"
+        android:icon="@drawable/ic_menu_import_export"
+        android:title="@string/wishlist_set_pricing"
         app:showAsAction="ifRoom" />
 
 </menu>

@@ -19,10 +19,11 @@
 
 package com.gelakinetic.mtgfam.helpers.tcgp;
 
-import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
 import android.os.Handler;
+
+import androidx.collection.LongSparseArray;
 
 import com.gelakinetic.mtgfam.FamiliarActivity;
 import com.gelakinetic.mtgfam.R;
@@ -33,6 +34,7 @@ import com.gelakinetic.mtgfam.helpers.database.DatabaseManager;
 import com.gelakinetic.mtgfam.helpers.database.FamiliarDbException;
 import com.gelakinetic.mtgfam.helpers.database.FamiliarDbHandle;
 import com.gelakinetic.mtgfam.helpers.tcgp.JsonObjects.AccessToken;
+import com.gelakinetic.mtgfam.helpers.tcgp.JsonObjects.CategoryGroups;
 import com.gelakinetic.mtgfam.helpers.tcgp.JsonObjects.ProductDetails;
 import com.gelakinetic.mtgfam.helpers.tcgp.JsonObjects.ProductInformation;
 import com.gelakinetic.mtgfam.helpers.tcgp.JsonObjects.ProductMarketPrice;
@@ -53,11 +55,13 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import io.reactivex.Maybe;
 import io.reactivex.Single;
@@ -74,12 +78,12 @@ public class MarketPriceFetcher {
 
     private final CompositeDisposable mCompositeDisposable = new CompositeDisposable();
     private final Object mSynchronizer = new Object();
-    private final ArrayList<Future> mFutures = new ArrayList<>();
+    private final ArrayList<Future<?>> mFutures = new ArrayList<>();
 
     private static CheckFutureRunnable mCheckFutureRunnable;
     private final Handler mHandler;
 
-    private abstract class RecordingPersister<Rec, Key> implements RecordProvider<Key>, Persister<Rec, Key> {
+    private abstract static class RecordingPersister<Rec, Key> implements RecordProvider<Key>, Persister<Rec, Key> {
     }
 
     /**
@@ -139,7 +143,6 @@ public class MarketPriceFetcher {
                 String tcgSetName;
 
                 /* then the same for multicard ordering */
-                Cursor cursor = null;
                 FamiliarDbHandle cardInfoHandle = new FamiliarDbHandle();
                 try {
                     SQLiteDatabase database = DatabaseManager.openDatabase(mActivity, false, cardInfoHandle);
@@ -157,16 +160,13 @@ public class MarketPriceFetcher {
                 } catch (SQLiteException | FamiliarDbException e) {
                     return Single.error(new Exception(mActivity.getString(R.string.price_error_database)));
                 } finally {
-                    if (null != cursor) {
-                        cursor.close();
-                    }
                     DatabaseManager.closeDatabase(mActivity, cardInfoHandle);
                 }
 
                 /* If this isn't a multi-card, don't iterate so much */
                 int numMultiCardOptions = 1;
                 if (multiCardType != CardDbAdapter.MultiCardType.NOPE) {
-                    numMultiCardOptions = 4;
+                    numMultiCardOptions = 3;
                 }
 
                 /* Iterate through all possible queries for this card
@@ -195,12 +195,8 @@ public class MarketPriceFetcher {
                                             tcgCardName = CardDbAdapter.getNameFromSetAndNumber(params.getExpansion(), params.getNumber().replace("a", "b"), database);
                                             break;
                                         case 2:
-                                            /* Try the combined name in one direction */
-                                            tcgCardName = CardDbAdapter.getSplitName(params.getMultiverseId(), true, database);
-                                            break;
-                                        case 3:
-                                            /* Try the combined name in the other direction */
-                                            tcgCardName = CardDbAdapter.getSplitName(params.getMultiverseId(), false, database);
+                                            /* Try the combined name */
+                                            tcgCardName = CardDbAdapter.getCombinedName(params.getExpansion(), params.getNumber(), database);
                                             break;
                                         default:
                                             /* Something went wrong */
@@ -214,7 +210,7 @@ public class MarketPriceFetcher {
 
                                 /* Retry with accent marks removed */
                                 if (accentOption == 1) {
-                                    tcgCardName = CardDbAdapter.removeAccentMarks(tcgCardName);
+                                    tcgCardName = CardDbAdapter.removeAccentMarks(Objects.requireNonNull(tcgCardName));
                                 }
 
                                 /* Try it with no set name */
@@ -237,19 +233,48 @@ public class MarketPriceFetcher {
                                         ProductDetails details = api.getProductDetails(information.results);
                                         if (details.results.length > 0) {
                                             // Assume the first result is the best result
-                                            long bestResult[] = {details.results[0].productId};
+                                            long[] bestResult = {details.results[0].productId};
+                                            String bestUrl = "";
+                                            boolean okResultFound = false;
                                             // Look through all results for a perfect match
                                             for (ProductDetails.Details searchResult : details.results) {
-                                                if (searchResult.productName.toLowerCase().equals(tcgCardName.toLowerCase())) {
-                                                    // Found a perfect match!
-                                                    bestResult[0] = searchResult.productId;
-                                                    break;
+                                                String expansion = getExpansionFromGroupId(api, context, searchResult.groupId);
+                                                if (searchResult.name.toLowerCase().equals(tcgCardName.toLowerCase())) {
+                                                    if (null != expansion && null != tcgSetName) {
+                                                        if (expansion.toLowerCase().equals(tcgSetName.toLowerCase())) {
+                                                            // Found a perfect match, including expansion!
+                                                            bestResult[0] = searchResult.productId;
+                                                            bestUrl = searchResult.url;
+                                                            break;
+                                                        }
+                                                    } else {
+                                                        // Found a perfect match, no expansion to match!
+                                                        bestResult[0] = searchResult.productId;
+                                                        bestUrl = searchResult.url;
+                                                        break;
+                                                    }
+                                                } else if (!okResultFound && searchResult.name.toLowerCase().startsWith(tcgCardName.toLowerCase())) {
+                                                    if (null != expansion && null != tcgSetName) {
+                                                        if (expansion.toLowerCase().equals(tcgSetName.toLowerCase())) {
+                                                            // Found a good match, including expansion!
+                                                            // Set it but keep searching for a perfect match
+                                                            bestResult[0] = searchResult.productId;
+                                                            bestUrl = searchResult.url;
+                                                            okResultFound = true;
+                                                        }
+                                                    } else {
+                                                        // Found a good match, no expansion to match!
+                                                        // Set it but keep searching for a perfect match
+                                                        bestResult[0] = searchResult.productId;
+                                                        bestUrl = searchResult.url;
+                                                        okResultFound = true;
+                                                    }
                                                 }
                                             }
                                             ProductMarketPrice price = api.getProductMarketPrice(bestResult);
                                             if (price.results.length > 0) {
                                                 /* Return a new MarketPriceInfo */
-                                                return Single.just(new MarketPriceInfo(price.results, details.results));
+                                                return Single.just(new MarketPriceInfo(price.results, bestUrl));
                                             } else if (price.errors.length > 0) {
                                                 /* Return the error returned by TCGPlayer */
                                                 return Single.error(new Throwable(price.errors[0]));
@@ -377,6 +402,44 @@ public class MarketPriceFetcher {
     }
 
     /**
+     * Given a group ID, return the string expansion name. If it doesn't exist, use the API to
+     * download a list of all group IDs and names, then save the map to the disk
+     *
+     * @param api     The TcgpApi to query for group names
+     * @param context The context to access SharedPreferences
+     * @param groupId The group ID to query for
+     * @return The String name of the given group ID, or null
+     */
+    @Nullable
+    private String getExpansionFromGroupId(TcgpApi api, FamiliarActivity context, long groupId) throws IOException {
+        LongSparseArray<String> map = PreferenceAdapter.getGroups(context);
+        String expansionName = map.get(groupId);
+        if (null == expansionName) {
+            // Group is missing, download them all
+            map.clear();
+            int[] offset = {0};
+            while (true) {
+                CategoryGroups groups = api.getCategoryGroups(offset);
+                // If there are errors or no groups left, break the loop
+                if (groups.errors.length > 0 || groups.results.length == 0) {
+                    break;
+                }
+                // Add all groups to the map
+                for (CategoryGroups.Group group : groups.results) {
+                    map.put(group.groupId, group.name);
+                }
+            }
+            // Now that all groups have been downloaded, save them to the disk
+            PreferenceAdapter.setGroups(context, map);
+
+            // Now that the map is downloaded, try again
+            expansionName = map.get(groupId);
+        }
+        // Return the String
+        return expansionName;
+    }
+
+    /**
      * This function fetches the price for a given MtgCard and calls the appropriate callbacks.
      * It ensures the network operations are called on a non-UI thread and the result callbacks are
      * called on the UI thread.
@@ -390,7 +453,7 @@ public class MarketPriceFetcher {
 
         if (null == card.getName() || card.getName().isEmpty() ||
                 null == card.getExpansion() || card.getExpansion().isEmpty() ||
-                0 == card.getMultiverseId()) {
+                null == card.getNumber()) {
             throw new InstantiationException("card must have a name and expansion to fetch price");
         }
 
@@ -514,7 +577,7 @@ public class MarketPriceFetcher {
         mCompositeDisposable.clear();
         mThreadPool.shutdownNow();
         mThreadPool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-        for (Future future : mFutures) {
+        for (Future<?> future : mFutures) {
             future.cancel(true);
         }
         mFutures.clear();

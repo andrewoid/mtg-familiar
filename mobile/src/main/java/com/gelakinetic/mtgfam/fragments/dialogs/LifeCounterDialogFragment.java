@@ -21,7 +21,9 @@ package com.gelakinetic.mtgfam.fragments.dialogs;
 
 import android.app.Dialog;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.afollestad.materialdialogs.MaterialDialog;
 import com.gelakinetic.mtgfam.R;
@@ -32,9 +34,8 @@ import com.gelakinetic.mtgfam.helpers.gatherings.Gathering;
 import com.gelakinetic.mtgfam.helpers.gatherings.GatheringsIO;
 import com.gelakinetic.mtgfam.helpers.gatherings.GatheringsPlayerData;
 
-import org.jetbrains.annotations.NotNull;
-
 import java.util.ArrayList;
+import java.util.Objects;
 
 /**
  * Class that creates dialogs for LifeCounterFragment
@@ -59,7 +60,7 @@ public class LifeCounterDialogFragment extends FamiliarDialogFragment {
         }
     }
 
-    @NotNull
+    @NonNull
     @Override
     public Dialog onCreateDialog(Bundle savedInstanceState) {
         if (!canCreateDialog()) {
@@ -70,8 +71,8 @@ public class LifeCounterDialogFragment extends FamiliarDialogFragment {
         /* This will be set to false if we are returning a null dialog. It prevents a crash */
         setShowsDialog(true);
 
-        MaterialDialog.Builder builder = new MaterialDialog.Builder(getActivity());
-        mDialogId = getArguments().getInt(ID_KEY);
+        MaterialDialog.Builder builder = new MaterialDialog.Builder(Objects.requireNonNull(getActivity()));
+        mDialogId = Objects.requireNonNull(getArguments()).getInt(ID_KEY);
 
         if (null == getParentLifeCounterFragment()) {
             return DontShowDialog();

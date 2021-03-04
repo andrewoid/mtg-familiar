@@ -26,7 +26,6 @@ import android.content.ClipDescription;
 import android.content.ClipboardManager;
 import android.content.Intent;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
 import android.text.Html;
 import android.text.SpannableString;
 import android.text.method.LinkMovementMethod;
@@ -37,6 +36,9 @@ import android.widget.ListView;
 import android.widget.SimpleAdapter;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.afollestad.materialdialogs.MaterialDialog;
 import com.gelakinetic.GathererScraper.JsonTypes.Card;
 import com.gelakinetic.GathererScraper.Language;
@@ -46,18 +48,18 @@ import com.gelakinetic.mtgfam.fragments.CardViewPagerFragment;
 import com.gelakinetic.mtgfam.fragments.DecklistFragment;
 import com.gelakinetic.mtgfam.helpers.CardHelpers;
 import com.gelakinetic.mtgfam.helpers.DecklistHelpers;
+import com.gelakinetic.mtgfam.helpers.ExpansionImageHelper;
 import com.gelakinetic.mtgfam.helpers.ImageGetterHelper;
 import com.gelakinetic.mtgfam.helpers.MtgCard;
 import com.gelakinetic.mtgfam.helpers.SnackbarWrapper;
 import com.gelakinetic.mtgfam.helpers.database.FamiliarDbException;
 import com.gelakinetic.mtgfam.helpers.tcgp.MarketPriceInfo;
 
-import org.jetbrains.annotations.NotNull;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 /**
  * Class that creates dialogs for CardViewFragment
@@ -91,7 +93,7 @@ public class CardViewDialogFragment extends FamiliarDialogFragment {
         return null;
     }
 
-    @NotNull
+    @NonNull
     @Override
     @SuppressWarnings("SpellCheckingInspection")
     public Dialog onCreateDialog(Bundle savedInstanceState) {
@@ -103,7 +105,7 @@ public class CardViewDialogFragment extends FamiliarDialogFragment {
         /* This will be set to false if we are returning a null dialog. It prevents a crash */
         setShowsDialog(true);
 
-        mDialogId = getArguments().getInt(ID_KEY);
+        mDialogId = Objects.requireNonNull(getArguments()).getInt(ID_KEY);
 
         if (null == getParentCardViewFragment()) {
             return DontShowDialog();
@@ -167,51 +169,63 @@ public class CardViewDialogFragment extends FamiliarDialogFragment {
 
                 final String priceFormat = "$%1$,.2f";
                 MarketPriceInfo price = getParentCardViewFragment().mPriceInfo;
-                if (price.hasNormalPrice()) {
-                    ((TextView) v.findViewById(R.id.normal_low)).setText(String.format(Locale.US, priceFormat, price.getPrice(false, MarketPriceInfo.PriceType.LOW)));
-                    ((TextView) v.findViewById(R.id.normal_mid)).setText(String.format(Locale.US, priceFormat, price.getPrice(false, MarketPriceInfo.PriceType.MID)));
-                    ((TextView) v.findViewById(R.id.normal_high)).setText(String.format(Locale.US, priceFormat, price.getPrice(false, MarketPriceInfo.PriceType.HIGH)));
-                    ((TextView) v.findViewById(R.id.normal_market)).setText(String.format(Locale.US, priceFormat, price.getPrice(false, MarketPriceInfo.PriceType.MARKET)));
+                if (null != price) {
+                    if (price.hasNormalPrice()) {
+                        ((TextView) v.findViewById(R.id.normal_low)).setText(String.format(Locale.US, priceFormat, price.getPrice(false, MarketPriceInfo.PriceType.LOW).price));
+                        ((TextView) v.findViewById(R.id.normal_mid)).setText(String.format(Locale.US, priceFormat, price.getPrice(false, MarketPriceInfo.PriceType.MID).price));
+                        ((TextView) v.findViewById(R.id.normal_high)).setText(String.format(Locale.US, priceFormat, price.getPrice(false, MarketPriceInfo.PriceType.HIGH).price));
+                        ((TextView) v.findViewById(R.id.normal_market)).setText(String.format(Locale.US, priceFormat, price.getPrice(false, MarketPriceInfo.PriceType.MARKET).price));
+                    } else {
+                        v.findViewById(R.id.normal_prices).setVisibility(View.GONE);
+                        v.findViewById(R.id.normal_foil_divider).setVisibility(View.GONE);
+                    }
+
+                    if (price.hasFoilPrice()) {
+                        ((TextView) v.findViewById(R.id.foil_low)).setText(String.format(Locale.US, priceFormat, price.getPrice(true, MarketPriceInfo.PriceType.LOW).price));
+                        ((TextView) v.findViewById(R.id.foil_mid)).setText(String.format(Locale.US, priceFormat, price.getPrice(true, MarketPriceInfo.PriceType.MID).price));
+                        ((TextView) v.findViewById(R.id.foil_high)).setText(String.format(Locale.US, priceFormat, price.getPrice(true, MarketPriceInfo.PriceType.HIGH).price));
+                        ((TextView) v.findViewById(R.id.foil_market)).setText(String.format(Locale.US, priceFormat, price.getPrice(true, MarketPriceInfo.PriceType.MARKET).price));
+                    } else {
+                        v.findViewById(R.id.foil_prices).setVisibility(View.GONE);
+                        v.findViewById(R.id.normal_foil_divider).setVisibility(View.GONE);
+                    }
+
+                    TextView priceLink = v.findViewById(R.id.pricelink);
+                    priceLink.setMovementMethod(LinkMovementMethod.getInstance());
+                    priceLink.setText(ImageGetterHelper.formatHtmlString("<a href=\"" + getParentCardViewFragment().mPriceInfo.getUrl() + "\">" +
+                            getString(R.string.card_view_price_dialog_link) + "</a>"));
+
+                    MaterialDialog.Builder adb = new MaterialDialog.Builder(getParentCardViewFragment().mActivity);
+                    adb.customView(v, false);
+                    adb.title(R.string.card_view_price_dialog_title);
+                    return adb.build();
                 } else {
-                    v.findViewById(R.id.normal_prices).setVisibility(View.GONE);
-                    v.findViewById(R.id.normal_foil_divider).setVisibility(View.GONE);
+                    return DontShowDialog();
                 }
-
-                if (price.hasFoilPrice()) {
-                    ((TextView) v.findViewById(R.id.foil_low)).setText(String.format(Locale.US, priceFormat, price.getPrice(true, MarketPriceInfo.PriceType.LOW)));
-                    ((TextView) v.findViewById(R.id.foil_mid)).setText(String.format(Locale.US, priceFormat, price.getPrice(true, MarketPriceInfo.PriceType.MID)));
-                    ((TextView) v.findViewById(R.id.foil_high)).setText(String.format(Locale.US, priceFormat, price.getPrice(true, MarketPriceInfo.PriceType.HIGH)));
-                    ((TextView) v.findViewById(R.id.foil_market)).setText(String.format(Locale.US, priceFormat, price.getPrice(true, MarketPriceInfo.PriceType.MARKET)));
-                } else {
-                    v.findViewById(R.id.foil_prices).setVisibility(View.GONE);
-                    v.findViewById(R.id.normal_foil_divider).setVisibility(View.GONE);
-                }
-
-                TextView priceLink = v.findViewById(R.id.pricelink);
-                priceLink.setMovementMethod(LinkMovementMethod.getInstance());
-                priceLink.setText(ImageGetterHelper.formatHtmlString("<a href=\"" + getParentCardViewFragment().mPriceInfo.getUrl() + "\">" +
-                        getString(R.string.card_view_price_dialog_link) + "</a>"));
-
-                MaterialDialog.Builder adb = new MaterialDialog.Builder(getParentCardViewFragment().mActivity);
-                adb.customView(v, false);
-                adb.title(R.string.card_view_price_dialog_title);
-                return adb.build();
             }
             case CHANGE_SET: {
-                final String[] aSets = getParentCardViewFragment().mPrintings.toArray(new String[getParentCardViewFragment().mPrintings.size()]);
-                final Long[] aIds = getParentCardViewFragment().mCardIds.toArray(new Long[getParentCardViewFragment().mCardIds.size()]);
 
                 /* Sanity check */
-                for (String set : aSets) {
+                for (ExpansionImageHelper.ExpansionImageData set : getParentCardViewFragment().mPrintings) {
                     if (set == null) {
                         return DontShowDialog();
                     }
                 }
-                MaterialDialog.Builder builder = new MaterialDialog.Builder(getParentCardViewFragment().mActivity);
-                builder.title(R.string.card_view_set_dialog_title);
-                builder.items((CharSequence[]) aSets);
-                builder.itemsCallback((dialog, itemView, position, text) -> getParentCardViewFragment().setInfoFromID(aIds[position]));
-                return builder.build();
+
+                /* Build and return the dialog */
+                ExpansionImageHelper.ChangeSetListAdapter adapter = (new ExpansionImageHelper()).
+                        new ChangeSetListAdapter(getContext(), getParentCardViewFragment().mPrintings, ExpansionImageHelper.ExpansionImageSize.LARGE) {
+                    @Override
+                    protected void onClick(ExpansionImageHelper.ExpansionImageData data) {
+                        getParentCardViewFragment().setInfoFromID(data.getDbId());
+                    }
+                };
+                Dialog dialog = new MaterialDialog.Builder(Objects.requireNonNull(getActivity()))
+                        .title(R.string.card_view_set_dialog_title)
+                        .adapter(adapter, null)
+                        .build();
+                adapter.setDialogReference(dialog);
+                return dialog;
             }
             case CARD_RULINGS: {
                 if (null == getParentCardViewFragment() || getParentCardViewFragment().mRulingsArrayList == null) {
@@ -241,8 +255,9 @@ public class CardViewDialogFragment extends FamiliarDialogFragment {
                 textViewRules.setText(messageGlyph);
 
                 textViewUrl.setMovementMethod(LinkMovementMethod.getInstance());
+                // Gatherer doesn't use HTTPS as of 1/6/2019
                 textViewUrl.setText(Html.fromHtml(
-                        "<a href=http://gatherer.wizards.com/Pages/Card/Details.aspx?multiverseid=" +
+                        "<a href=https://gatherer.wizards.com/Pages/Card/Details.aspx?multiverseid=" +
                                 getParentCardViewFragment().mCard.getMultiverseId() + ">" + getString(R.string.card_view_gatherer_page) + "</a>"
                 ));
 
@@ -304,15 +319,11 @@ public class CardViewDialogFragment extends FamiliarDialogFragment {
                                 }
                                 if (!entryIncremented) {
                                     // Add a new card to the deck
-                                    try {
-                                        decklist.add(new MtgCard(cardName, cardSet, false, 1, false));
-                                    } catch (java.lang.InstantiationException e) {
-                                        /* Eat it */
-                                    }
+                                    decklist.add(new MtgCard(cardName, cardSet, false, 1, false));
                                 }
 
                                 // Write the decklist back
-                                DecklistHelpers.WriteDecklist(getActivity(), decklist, deckFileName);
+                                DecklistHelpers.WriteDecklist(Objects.requireNonNull(getActivity()), decklist, deckFileName);
                             } catch (FamiliarDbException e) {
                                 getParentCardViewFragment().handleFamiliarDbException(false);
                             }
@@ -428,7 +439,7 @@ public class CardViewDialogFragment extends FamiliarDialogFragment {
                 lv.setAdapter(adapter);
                 lv.setOnItemLongClickListener((parent, view, position, id) -> {
                     /* Copy the translated name to the clipboard */
-                    ClipboardManager clipboard = (ClipboardManager) (getParentCardViewFragment().getContext().
+                    ClipboardManager clipboard = (ClipboardManager) (Objects.requireNonNull(getParentCardViewFragment().getContext()).
                             getSystemService(android.content.Context.CLIPBOARD_SERVICE));
                     if (null != clipboard) {
                         ClipData cd = new ClipData(
@@ -442,7 +453,7 @@ public class CardViewDialogFragment extends FamiliarDialogFragment {
                     return false;
                 });
 
-                MaterialDialog.Builder builder = new MaterialDialog.Builder(getParentCardViewFragment().mActivity);
+                MaterialDialog.Builder builder = new MaterialDialog.Builder(Objects.requireNonNull(getParentCardViewFragment()).mActivity);
                 builder.customView(lv, false);
                 builder.title(R.string.card_view_translated_dialog_title);
                 return builder.build();

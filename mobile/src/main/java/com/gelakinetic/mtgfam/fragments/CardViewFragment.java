@@ -29,7 +29,6 @@ import android.database.Cursor;
 import android.database.CursorIndexOutOfBoundsException;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
-import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
@@ -37,11 +36,7 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v4.app.ActivityCompat;
-import android.support.v4.content.ContextCompat;
-import android.support.v4.content.FileProvider;
+import android.provider.MediaStore;
 import android.text.Html;
 import android.text.Html.ImageGetter;
 import android.text.SpannableString;
@@ -60,6 +55,11 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+
 import com.bumptech.glide.load.DataSource;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.bumptech.glide.load.engine.GlideException;
@@ -67,12 +67,12 @@ import com.bumptech.glide.request.RequestListener;
 import com.bumptech.glide.request.target.Target;
 import com.gelakinetic.GathererScraper.JsonTypes.Card;
 import com.gelakinetic.GathererScraper.Language;
-import com.gelakinetic.mtgfam.BuildConfig;
 import com.gelakinetic.mtgfam.FamiliarActivity;
 import com.gelakinetic.mtgfam.R;
 import com.gelakinetic.mtgfam.fragments.dialogs.CardViewDialogFragment;
 import com.gelakinetic.mtgfam.fragments.dialogs.FamiliarDialogFragment;
 import com.gelakinetic.mtgfam.helpers.ColorIndicatorView;
+import com.gelakinetic.mtgfam.helpers.ExpansionImageHelper;
 import com.gelakinetic.mtgfam.helpers.FamiliarGlideTarget;
 import com.gelakinetic.mtgfam.helpers.GlideApp;
 import com.gelakinetic.mtgfam.helpers.GlideRequest;
@@ -94,15 +94,15 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.Objects;
 
 /**
  * This class handles displaying card info.
@@ -116,7 +116,7 @@ public class CardViewFragment extends FamiliarFragment {
 
     /* Where the card image is loaded to */
     public static final int MAIN_PAGE = 1;
-    private static final int DIALOG = 2;
+    // private static final int DIALOG = 2; DEPRECATED!!
     public static final int SHARE = 3;
     /* Used to store the String when copying to clipboard */
     private String mCopyString;
@@ -125,6 +125,7 @@ public class CardViewFragment extends FamiliarFragment {
     private TextView mCostTextView;
     private TextView mTypeTextView;
     private TextView mSetTextView;
+    private ImageView mSetImageView;
     private TextView mAbilityTextView;
     private TextView mPowTouTextView;
     private TextView mFlavorTextView;
@@ -144,7 +145,7 @@ public class CardViewFragment extends FamiliarFragment {
 
     /* Loaded in a Spice Service */
     public MarketPriceInfo mPriceInfo;
-    public String mErrorMessage;
+    private String mErrorMessage;
 
     /* Card info, used to build the URL to fetch the picture */
     public MtgCard mCard;
@@ -154,8 +155,7 @@ public class CardViewFragment extends FamiliarFragment {
     private int mTransformId;
 
     /* To switch card between printings */
-    public LinkedHashSet<String> mPrintings;
-    public LinkedHashSet<Long> mCardIds;
+    public LinkedHashSet<ExpansionImageHelper.ExpansionImageData> mPrintings;
 
     /* Easier than calling getActivity() all the time, and handles being nested */
     public FamiliarActivity mActivity;
@@ -168,6 +168,19 @@ public class CardViewFragment extends FamiliarFragment {
     private Target mGlideTarget = null;
     private Drawable mDrawableForDialog = null;
     private boolean mIsOnlineOnly = false;
+    private final View.OnClickListener showEntireSet = new View.OnClickListener() {
+        @Override
+        public void onClick(View v) {
+            SearchCriteria setSearch = new SearchCriteria();
+            assert mSetTextView.getText() != null;
+            setSearch.sets = Collections.singletonList(mSetTextView.getText().toString());
+            Bundle arguments = new Bundle();
+            arguments.putBoolean(SearchViewFragment.CRITERIA_FLAG, true);
+            PreferenceAdapter.setSearchCriteria(getContext(), setSearch);
+            ResultListFragment rlFrag = new ResultListFragment();
+            startNewFragment(rlFrag, arguments);
+        }
+    };
 
     /**
      * Kill any AsyncTask if it is still running.
@@ -217,7 +230,10 @@ public class CardViewFragment extends FamiliarFragment {
             Bundle savedInstanceState) {
 
         try {
-            mActivity = ((FamiliarFragment) getParentFragment()).getFamiliarActivity();
+            FamiliarFragment fragment = ((FamiliarFragment) getParentFragment());
+            if (null != fragment) {
+                mActivity = fragment.getFamiliarActivity();
+            }
         } catch (NullPointerException e) {
             mActivity = getFamiliarActivity();
         }
@@ -229,6 +245,7 @@ public class CardViewFragment extends FamiliarFragment {
         mCostTextView = myFragmentView.findViewById(R.id.cost);
         mTypeTextView = myFragmentView.findViewById(R.id.type);
         mSetTextView = myFragmentView.findViewById(R.id.set);
+        mSetImageView = myFragmentView.findViewById(R.id.set_image);
         mAbilityTextView = myFragmentView.findViewById(R.id.ability);
         mFlavorTextView = myFragmentView.findViewById(R.id.flavor);
         mArtistTextView = myFragmentView.findViewById(R.id.artist);
@@ -251,15 +268,8 @@ public class CardViewFragment extends FamiliarFragment {
         registerForContextMenu(mArtistTextView);
         registerForContextMenu(mNumberTextView);
 
-        mSetTextView.setOnClickListener(v -> {
-            SearchCriteria setSearch = new SearchCriteria();
-            assert mSetTextView.getText() != null;
-            setSearch.sets = Collections.singletonList(mSetTextView.getText().toString());
-            Bundle arguments = new Bundle();
-            arguments.putSerializable(SearchViewFragment.CRITERIA, setSearch);
-            ResultListFragment rlFrag = new ResultListFragment();
-            startNewFragment(rlFrag, arguments);
-        });
+        mSetTextView.setOnClickListener(showEntireSet);
+        mSetImageView.setOnClickListener(showEntireSet);
 
         mCardImageView.setOnLongClickListener(view -> {
             saveImageWithGlide(MAIN_PAGE);
@@ -374,46 +384,46 @@ public class CardViewFragment extends FamiliarFragment {
 
         Cursor cCardById = null;
         Cursor cCardByName = null;
+        Cursor cAllCardsWithName = null;
         FamiliarDbHandle handle = new FamiliarDbHandle();
         try {
             SQLiteDatabase database = DatabaseManager.openDatabase(mActivity, false, handle);
             cCardById = CardDbAdapter.fetchCards(new long[]{id}, null, database);
 
             /* http://magiccards.info/scans/en/mt/55.jpg */
-            mCard = new MtgCard(getActivity(),
-                    cCardById.getString(cCardById.getColumnIndex(CardDbAdapter.KEY_NAME)),
-                    cCardById.getString(cCardById.getColumnIndex(CardDbAdapter.KEY_SET)),
-                    false, 0);
+            mCard = new MtgCard(database, cCardById);
 
             switch (mCard.getRarity()) {
                 case 'C':
                 case 'c':
-                    mSetTextView.setTextColor(ContextCompat.getColor(getContext(),
+                    mSetTextView.setTextColor(ContextCompat.getColor(Objects.requireNonNull(getContext()),
                             getResourceIdFromAttr(R.attr.color_common)));
                     break;
                 case 'U':
                 case 'u':
-                    mSetTextView.setTextColor(ContextCompat.getColor(getContext(),
+                    mSetTextView.setTextColor(ContextCompat.getColor(Objects.requireNonNull(getContext()),
                             getResourceIdFromAttr(R.attr.color_uncommon)));
                     break;
                 case 'R':
                 case 'r':
-                    mSetTextView.setTextColor(ContextCompat.getColor(getContext(),
+                    mSetTextView.setTextColor(ContextCompat.getColor(Objects.requireNonNull(getContext()),
                             getResourceIdFromAttr(R.attr.color_rare)));
                     break;
                 case 'M':
                 case 'm':
-                    mSetTextView.setTextColor(ContextCompat.getColor(getContext(),
+                    mSetTextView.setTextColor(ContextCompat.getColor(Objects.requireNonNull(getContext()),
                             getResourceIdFromAttr(R.attr.color_mythic)));
                     break;
                 case 'T':
                 case 't':
-                    mSetTextView.setTextColor(ContextCompat.getColor(getContext(),
+                    mSetTextView.setTextColor(ContextCompat.getColor(Objects.requireNonNull(getContext()),
                             getResourceIdFromAttr(R.attr.color_timeshifted)));
                     break;
             }
 
             mCostTextView.setText(ImageGetterHelper.formatStringWithGlyphs(mCard.getManaCost(), imgGetter));
+
+            ExpansionImageHelper.loadExpansionImage(getContext(), mCard.getExpansion(), mCard.getRarity(), mSetImageView, mSetTextView, ExpansionImageHelper.ExpansionImageSize.LARGE);
 
             mAbilityTextView.setText(ImageGetterHelper.formatStringWithGlyphs(mCard.getText(), imgGetter));
             mAbilityTextView.setMovementMethod(LinkMovementMethod.getInstance());
@@ -434,7 +444,7 @@ public class CardViewFragment extends FamiliarFragment {
                 mPowTouTextView.setText(CardDbAdapter.getPrintedPTL(loyalty, false));
             } else if (p != CardDbAdapter.NO_ONE_CARES && t != CardDbAdapter.NO_ONE_CARES) {
                 boolean shouldShowSign = mCard.getText().contains("Augment {") && mSetTextView.getText().equals("UST");
-                mPowTouTextView.setText(CardDbAdapter.getPrintedPTL(p, shouldShowSign) + "/" + CardDbAdapter.getPrintedPTL(t, shouldShowSign));
+                mPowTouTextView.setText(String.format("%s/%s", CardDbAdapter.getPrintedPTL(p, shouldShowSign), CardDbAdapter.getPrintedPTL(t, shouldShowSign)));
             } else {
                 mPowTouTextView.setText("");
             }
@@ -442,7 +452,6 @@ public class CardViewFragment extends FamiliarFragment {
             boolean isMultiCard = false;
             switch (CardDbAdapter.isMultiCard(mCard.getNumber(), mCard.getExpansion())) {
                 case NOPE:
-                    isMultiCard = false;
                     mTransformButton.setVisibility(View.GONE);
                     mTransformButtonDivider.setVisibility(View.GONE);
                     break;
@@ -512,7 +521,7 @@ public class CardViewFragment extends FamiliarFragment {
                 mColorIndicatorLayout.setVisibility(View.GONE);
             }
 
-            String allLanguageKeys[][] = {
+            String[][] allLanguageKeys = {
                     {Language.Chinese_Traditional, CardDbAdapter.KEY_NAME_CHINESE_TRADITIONAL, CardDbAdapter.KEY_MULTIVERSEID_CHINESE_TRADITIONAL},
                     {Language.Chinese_Simplified, CardDbAdapter.KEY_NAME_CHINESE_SIMPLIFIED, CardDbAdapter.KEY_MULTIVERSEID_CHINESE_SIMPLIFIED},
                     {Language.French, CardDbAdapter.KEY_NAME_FRENCH, CardDbAdapter.KEY_MULTIVERSEID_FRENCH},
@@ -531,14 +540,20 @@ public class CardViewFragment extends FamiliarFragment {
             Card.ForeignPrinting englishPrinting = new Card.ForeignPrinting(mCard.getName(), Language.English, mCard.getMultiverseId());
             mCard.getForeignPrintings().add(englishPrinting);
 
-            // Add all the others
-            for (String lang[] : allLanguageKeys) {
-                Card.ForeignPrinting fp = new Card.ForeignPrinting(
-                        cCardById.getString(cCardById.getColumnIndex(lang[1])), lang[0],
-                        cCardById.getInt(cCardById.getColumnIndex(lang[2])));
-                if (fp.getName() != null && !fp.getName().isEmpty()) {
-                    mCard.getForeignPrintings().add(fp);
+            // For each card with this name in the database
+            cAllCardsWithName = CardDbAdapter.fetchCardByName(mCard.getName(), CardDbAdapter.ALL_CARD_DATA_KEYS, false, false, false, database);
+            cAllCardsWithName.moveToFirst();
+            while (!cAllCardsWithName.isAfterLast()) {
+                // For each foreign printing for that card
+                for (String[] lang : allLanguageKeys) {
+                    Card.ForeignPrinting fp = new Card.ForeignPrinting(
+                            cAllCardsWithName.getString(cAllCardsWithName.getColumnIndex(lang[1])), lang[0],
+                            cAllCardsWithName.getInt(cAllCardsWithName.getColumnIndex(lang[2])));
+                    if (fp.getName() != null && !fp.getName().isEmpty() && !mCard.getForeignPrintings().contains(fp)) {
+                        mCard.getForeignPrintings().add(fp);
+                    }
                 }
+                cAllCardsWithName.moveToNext();
             }
 
             mIsOnlineOnly = CardDbAdapter.isOnlineOnly(mCard.getExpansion(), database);
@@ -549,10 +564,10 @@ public class CardViewFragment extends FamiliarFragment {
                     Arrays.asList(
                             CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_SET,
                             CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_ID,
-                            CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_NUMBER), false, false, database
+                            CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_RARITY,
+                            CardDbAdapter.DATABASE_TABLE_CARDS + "." + CardDbAdapter.KEY_NUMBER), false, false, false, database
             );
             mPrintings = new LinkedHashSet<>();
-            mCardIds = new LinkedHashSet<>();
             while (!cCardByName.isAfterLast()) {
                 String number =
                         cCardByName.getString(cCardByName.getColumnIndex(CardDbAdapter.KEY_NUMBER));
@@ -561,13 +576,14 @@ public class CardViewFragment extends FamiliarFragment {
                 } else {
                     number = "";
                 }
-                if (mPrintings.add(CardDbAdapter
-                        .getSetNameFromCode(cCardByName.getString(cCardByName.getColumnIndex(CardDbAdapter.KEY_SET)), database) + number)) {
-                    mCardIds.add(cCardByName.getLong(cCardByName.getColumnIndex(CardDbAdapter.KEY_ID)));
-                }
+                mPrintings.add(new ExpansionImageHelper.ExpansionImageData(
+                        CardDbAdapter.getSetNameFromCode(cCardByName.getString(cCardByName.getColumnIndex(CardDbAdapter.KEY_SET)), database) + number,
+                        cCardByName.getString(cCardByName.getColumnIndex(CardDbAdapter.KEY_SET)),
+                        (char) cCardByName.getInt(cCardByName.getColumnIndex(CardDbAdapter.KEY_RARITY)),
+                        cCardByName.getLong(cCardByName.getColumnIndex(CardDbAdapter.KEY_ID))));
                 cCardByName.moveToNext();
             }
-        } catch (SQLiteException | FamiliarDbException | CursorIndexOutOfBoundsException | java.lang.InstantiationException e) {
+        } catch (SQLiteException | FamiliarDbException | CursorIndexOutOfBoundsException e) {
             handleFamiliarDbException(true);
         } finally {
             if (null != cCardById) {
@@ -575,6 +591,9 @@ public class CardViewFragment extends FamiliarFragment {
             }
             if (null != cCardByName) {
                 cCardByName.close();
+            }
+            if (null != cAllCardsWithName) {
+                cAllCardsWithName.close();
             }
             DatabaseManager.closeDatabase(mActivity, handle);
         }
@@ -628,82 +647,108 @@ public class CardViewFragment extends FamiliarFragment {
             return;
         }
 
-        // Get a File where the image should be saved
-        File imageFile;
-        try {
-            imageFile = getSavedImageFile();
-        } catch (Exception e) {
-            SnackbarWrapper.makeAndShowText(getActivity(), e.getMessage(), SnackbarWrapper.LENGTH_SHORT);
-            return;
-        }
+        // Query the MediaStore to see if an image is already saved
+        MediaStoreInfo msi = getMediaStoreInfo();
 
         // Check if the saved image already exists
-        if (imageFile.exists()) {
+        if (null != msi) {
             if (SHARE == whereTo) {
                 // Image is already saved, just share it
-                shareImage();
+                shareImage(Uri.parse(MediaStore.Images.Media.getContentUri("external") + "/" + msi.getId()));
             } else {
                 // Or display the path where it's saved
-                String strPath = imageFile.getAbsolutePath();
-                SnackbarWrapper.makeAndShowText(getActivity(), getString(R.string.card_view_image_saved) + strPath, SnackbarWrapper.LENGTH_LONG);
+                SnackbarWrapper.makeAndShowText(getActivity(), getString(R.string.card_view_image_saved) + msi.getFilePath(), SnackbarWrapper.LENGTH_LONG);
             }
-            return;
-        }
-
-        runGlideTarget(new FamiliarGlideTarget(this, new FamiliarGlideTarget.DrawableLoadedCallback() {
-            /**
-             * When Glide loads the resource either from cache or the network, save it
-             * to a file then optionally launch the intent to share it
-             *
-             * @param resource The Drawable Glide loaded, hopefully a BitmapDrawable
-             */
-            @Override
-            protected void onDrawableLoaded(Drawable resource) {
-                if (resource instanceof BitmapDrawable) {
-                    // Save the image
-                    BitmapDrawable bitmapDrawable = (BitmapDrawable) resource;
-
+        } else {
+            runGlideTarget(new FamiliarGlideTarget(this, new FamiliarGlideTarget.DrawableLoadedCallback() {
+                /**
+                 * When Glide loads the resource either from cache or the network, save it
+                 * to a file then optionally launch the intent to share it
+                 *
+                 * @param resource The Drawable Glide loaded, hopefully a BitmapDrawable
+                 */
+                @Override
+                protected void onDrawableLoaded(Drawable resource) {
                     try {
-                        // Create the file
-                        if (!imageFile.createNewFile()) {
-                            // Couldn't create the file
-                            SnackbarWrapper.makeAndShowText(getActivity(), R.string.card_view_unable_to_create_file, SnackbarWrapper.LENGTH_SHORT);
-                            return;
-                        }
+                        if (resource instanceof BitmapDrawable) {
+                            // Save the image
+                            String url = MediaStore.Images.Media.insertImage(
+                                    getContext().getContentResolver(),
+                                    ((BitmapDrawable) resource).getBitmap(),
+                                    getSavedFileName(), mCard.getName() + " - " + mCard.getSetName());
 
-                        // Now that the file is created, write to it
-                        FileOutputStream fStream = new FileOutputStream(imageFile);
-                        boolean bCompressed = bitmapDrawable.getBitmap().compress(Bitmap.CompressFormat.JPEG, 90, fStream);
-                        fStream.flush();
-                        fStream.close();
+                            // Couldn't save the image for some reason
+                            if (null == url) {
+                                SnackbarWrapper.makeAndShowText(getActivity(), R.string.card_view_save_failure, SnackbarWrapper.LENGTH_SHORT);
+                            } else {
+                                // Notify the system that a new image was saved
+                                getFamiliarActivity().sendBroadcast(new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.parse(url)));
 
-                        // Couldn't save the image for some reason
-                        if (!bCompressed) {
-                            SnackbarWrapper.makeAndShowText(getActivity(), R.string.card_view_save_failure, SnackbarWrapper.LENGTH_SHORT);
-                            return;
+                                // Now that the image is saved, launch the intent
+                                if (SHARE == whereTo) {
+                                    // Image is already saved, just share it
+                                    shareImage(Uri.parse(url));
+                                } else {
+                                    // Or display the path where it's saved
+                                    MediaStoreInfo msi = getMediaStoreInfo();
+                                    if (null != msi) {
+                                        SnackbarWrapper.makeAndShowText(getActivity(), getString(R.string.card_view_image_saved) + msi.getFilePath(), SnackbarWrapper.LENGTH_LONG);
+                                    } else {
+                                        SnackbarWrapper.makeAndShowText(getActivity(), getString(R.string.card_view_image_saved) + url, SnackbarWrapper.LENGTH_LONG);
+                                    }
+                                }
+                            }
                         }
-                    } catch (IOException e) {
+                    } catch (Exception e) {
                         // Couldn't save it for some reason
                         SnackbarWrapper.makeAndShowText(getActivity(), R.string.card_view_save_failure, SnackbarWrapper.LENGTH_SHORT);
-                        return;
-                    }
-
-                    // Notify the system that a new image was saved
-                    getFamiliarActivity().sendBroadcast(new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE,
-                            Uri.fromFile(imageFile)));
-
-                    // Now that the image is saved, launch the intent
-                    if (SHARE == whereTo) {
-                        // Image is already saved, just share it
-                        shareImage();
-                    } else {
-                        // Or display the path where it's saved
-                        String strPath = imageFile.getAbsolutePath();
-                        SnackbarWrapper.makeAndShowText(getActivity(), getString(R.string.card_view_image_saved) + strPath, SnackbarWrapper.LENGTH_LONG);
                     }
                 }
+            }), 0, 0);
+        }
+    }
+
+    private static class MediaStoreInfo {
+        private final String filePath;
+        private final long mediaStoreId;
+
+        MediaStoreInfo(String fp, long id) {
+            filePath = fp;
+            mediaStoreId = id;
+        }
+
+        String getFilePath() {
+            return filePath;
+        }
+
+        long getId() {
+            return mediaStoreId;
+        }
+    }
+
+    /**
+     * Get the file path
+     *
+     * @return The file path and ID for this card's image in the MediaStore, or null
+     */
+    @javax.annotation.Nullable
+    private MediaStoreInfo getMediaStoreInfo() {
+        try (Cursor mCursor = getContext().getContentResolver().query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                new String[]{MediaStore.Images.Media.DISPLAY_NAME, MediaStore.Images.Media.DATA, MediaStore.Images.Media._ID},
+                MediaStore.Images.Media.DISPLAY_NAME + " = ?",
+                new String[]{getSavedFileName()},
+                MediaStore.Images.Media.DEFAULT_SORT_ORDER)) {
+            if (mCursor.getCount() > 0) {
+                mCursor.moveToFirst();
+                return new MediaStoreInfo(
+                        mCursor.getString(mCursor.getColumnIndex(MediaStore.Images.Media.DATA)),
+                        mCursor.getLong(mCursor.getColumnIndex(MediaStore.Images.Media._ID)));
             }
-        }), 0, 0);
+        } catch (Exception e) {
+            // eat it
+        }
+        return null;
     }
 
     /**
@@ -751,13 +796,15 @@ public class CardViewFragment extends FamiliarFragment {
 
         // Build the initial request
         GlideRequest<Drawable> request = mGlideRequestManager
-                .load(mCard.getImageUrlString(attempt, cardLanguage, getContext()))
+                .load(mCard.getImageUrlString(attempt, cardLanguage))
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
                 .listener(new RequestListener<Drawable>() {
                     @Override
                     public boolean onLoadFailed(@Nullable GlideException e, Object model, Target<Drawable> target, boolean isFirstResource) {
                         // Peek at the next URL
-                        if (null == mCard.getImageUrlString(attempt + 1, cardLanguage, getContext())) {
+                        String thisUrl = mCard.getImageUrlString(attempt, cardLanguage);
+                        String nextUrl = mCard.getImageUrlString(attempt + 1, cardLanguage);
+                        if (thisUrl.equals(nextUrl)) {
                             // All lookups failed
                             if (onlyCheckCache) {
                                 // It's only checking the cache. This comes first
@@ -833,11 +880,9 @@ public class CardViewFragment extends FamiliarFragment {
     /**
      * Launch the intent to share a saved image
      */
-    private void shareImage() {
+    private void shareImage(Uri uri) {
         /* Start the intent to share the image */
         try {
-            Uri uri = FileProvider.getUriForFile(mActivity,
-                    BuildConfig.APPLICATION_ID + ".FileProvider", getSavedImageFile());
             Intent shareIntent = new Intent();
             shareIntent.setAction(Intent.ACTION_SEND);
             shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -850,37 +895,8 @@ public class CardViewFragment extends FamiliarFragment {
         }
     }
 
-    /**
-     * Returns the File used to save this card's image.
-     *
-     * @return A File, either with the image already or blank
-     * @throws Exception If something goes wrong
-     */
-    private File getSavedImageFile() throws Exception {
-
-        String strPath;
-        try {
-            strPath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
-                    .getCanonicalPath() + "/MTGFamiliar";
-        } catch (IOException ex) {
-            throw new Exception(getString(R.string.card_view_no_pictures_folder));
-        }
-
-        File fPath = new File(strPath);
-
-        if (!fPath.exists()) {
-            if (!fPath.mkdir()) {
-                throw new Exception(getString(R.string.card_view_unable_to_create_dir));
-            }
-
-            if (!fPath.isDirectory()) {
-                throw new Exception(getString(R.string.card_view_unable_to_create_dir));
-            }
-        }
-
-        fPath = new File(strPath, mCard.getName() + "_" + mCard.getExpansion() + ".jpg");
-
-        return fPath;
+    private String getSavedFileName() {
+        return mCard.getName() + "_" + mCard.getExpansion() + ".jpg";
     }
 
     /**
@@ -918,7 +934,7 @@ public class CardViewFragment extends FamiliarFragment {
      *                 This information will vary depending on the class of v.
      */
     @Override
-    public void onCreateContextMenu(ContextMenu menu, View v, ContextMenuInfo menuInfo) {
+    public void onCreateContextMenu(@NonNull ContextMenu menu, @NonNull View v, ContextMenuInfo menuInfo) {
 
         super.onCreateContextMenu(menu, v, menuInfo);
 
@@ -940,46 +956,40 @@ public class CardViewFragment extends FamiliarFragment {
      * consume it here.
      */
     @Override
-    public boolean onContextItemSelected(android.view.MenuItem item) {
+    public boolean onContextItemSelected(@NonNull MenuItem item) {
         if (getUserVisibleHint()) {
             String copyText = null;
-            switch (item.getItemId()) {
-                case R.id.copy: {
-                    copyText = mCopyString;
-                    break;
+            if (item.getItemId() == R.id.copy) {
+                copyText = mCopyString;
+            } else if (item.getItemId() == R.id.copyall) {
+                if (mNameTextView.getText() != null &&
+                        mCostTextView.getText() != null &&
+                        mTypeTextView.getText() != null &&
+                        mSetTextView.getText() != null &&
+                        mAbilityTextView.getText() != null &&
+                        mFlavorTextView.getText() != null &&
+                        mPowTouTextView.getText() != null &&
+                        mArtistTextView.getText() != null &&
+                        mNumberTextView.getText() != null) {
+                    // Hacky, but it works
+                    String costText =
+                            convertHtmlToPlainText(Html.toHtml(
+                                    new SpannableString(mCostTextView.getText())));
+                    String abilityText =
+                            convertHtmlToPlainText(Html.toHtml(
+                                    new SpannableString(mAbilityTextView.getText())));
+                    copyText = mNameTextView.getText().toString() + '\n' +
+                            costText + '\n' +
+                            mTypeTextView.getText().toString() + '\n' +
+                            mSetTextView.getText().toString() + '\n' +
+                            abilityText + '\n' +
+                            mFlavorTextView.getText().toString() + '\n' +
+                            mPowTouTextView.getText().toString() + '\n' +
+                            mArtistTextView.getText().toString() + '\n' +
+                            mNumberTextView.getText().toString();
                 }
-                case R.id.copyall: {
-                    if (mNameTextView.getText() != null &&
-                            mCostTextView.getText() != null &&
-                            mTypeTextView.getText() != null &&
-                            mSetTextView.getText() != null &&
-                            mAbilityTextView.getText() != null &&
-                            mFlavorTextView.getText() != null &&
-                            mPowTouTextView.getText() != null &&
-                            mArtistTextView.getText() != null &&
-                            mNumberTextView.getText() != null) {
-                        // Hacky, but it works
-                        String costText =
-                                convertHtmlToPlainText(Html.toHtml(
-                                        new SpannableString(mCostTextView.getText())));
-                        String abilityText =
-                                convertHtmlToPlainText(Html.toHtml(
-                                        new SpannableString(mAbilityTextView.getText())));
-                        copyText = mNameTextView.getText().toString() + '\n' +
-                                costText + '\n' +
-                                mTypeTextView.getText().toString() + '\n' +
-                                mSetTextView.getText().toString() + '\n' +
-                                abilityText + '\n' +
-                                mFlavorTextView.getText().toString() + '\n' +
-                                mPowTouTextView.getText().toString() + '\n' +
-                                mArtistTextView.getText().toString() + '\n' +
-                                mNumberTextView.getText().toString();
-                    }
-                    break;
-                }
-                default: {
-                    return super.onContextItemSelected(item);
-                }
+            } else {
+                return super.onContextItemSelected(item);
             }
 
             if (copyText != null) {
@@ -987,7 +997,7 @@ public class CardViewFragment extends FamiliarFragment {
                         getSystemService(android.content.Context.CLIPBOARD_SERVICE));
                 if (null != clipboard) {
                     String label = getResources().getString(R.string.app_name);
-                    String mimeTypes[] = {ClipDescription.MIMETYPE_TEXT_PLAIN};
+                    String[] mimeTypes = {ClipDescription.MIMETYPE_TEXT_PLAIN};
                     ClipData cd = new ClipData(label, mimeTypes, new ClipData.Item(copyText));
                     clipboard.setPrimaryClip(cd);
                 }
@@ -1019,100 +1029,89 @@ public class CardViewFragment extends FamiliarFragment {
      * @return true if acted upon, false if otherwise
      */
     @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        if (mCard.getName() == null) {
+    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
+        if (null == mCard || mCard.getName() == null) {
             /*disable menu buttons if the card isn't initialized */
             return false;
         }
         /* Handle item selection */
-        switch (item.getItemId()) {
-            case R.id.image: {
-                loadImageWithGlide(null, true);
-                return true;
-            }
-            case R.id.price: {
-                try {
-                    mActivity.mMarketPriceStore.fetchMarketPrice(mCard,
-                            marketPriceInfo -> {
-                                if (CardViewFragment.this.isAdded()) {
-                                    if (marketPriceInfo != null) {
-                                        mPriceInfo = marketPriceInfo;
-                                    } else {
-                                        mPriceInfo = null;
-                                        mErrorMessage = getString(R.string.card_view_price_not_found);
-                                    }
-                                }
-                            },
-                            throwable -> {
-                                if (CardViewFragment.this.isAdded()) {
-                                    mPriceInfo = null;
-                                    mErrorMessage = throwable.getMessage();
-                                }
-                            },
-                            () -> {
-                                if (mPriceInfo == null) {
-                                    // This was a failure
-                                    CardViewFragment.this.removeDialog(getFragmentManager());
-                                    if (null != mErrorMessage) {
-                                        SnackbarWrapper.makeAndShowText(mActivity, mErrorMessage, SnackbarWrapper.LENGTH_SHORT);
-                                    }
+        else if (item.getItemId() == R.id.image) {
+            loadImageWithGlide(null, true);
+            return true;
+        } else if (item.getItemId() == R.id.price) {
+            try {
+                mActivity.mMarketPriceStore.fetchMarketPrice(mCard,
+                        marketPriceInfo -> {
+                            if (CardViewFragment.this.isAdded()) {
+                                if (marketPriceInfo != null) {
+                                    mPriceInfo = marketPriceInfo;
                                 } else {
-                                    // This was a success
-                                    showDialog(CardViewDialogFragment.GET_PRICE);
+                                    mPriceInfo = null;
+                                    mErrorMessage = getString(R.string.card_view_price_not_found);
                                 }
-                            });
+                            }
+                        },
+                        throwable -> {
+                            if (CardViewFragment.this.isAdded()) {
+                                mPriceInfo = null;
+                                mErrorMessage = throwable.getMessage();
+                            }
+                        },
+                        () -> {
+                            if (mPriceInfo == null) {
+                                // This was a failure
+                                CardViewFragment.this.removeDialog(getFragmentManager());
+                                if (null != mErrorMessage) {
+                                    SnackbarWrapper.makeAndShowText(mActivity, mErrorMessage, SnackbarWrapper.LENGTH_SHORT);
+                                }
+                            } else {
+                                // This was a success
+                                showDialog(CardViewDialogFragment.GET_PRICE);
+                            }
+                        });
 
-                } catch (java.lang.InstantiationException e) {
-                    mErrorMessage = getString(R.string.card_view_price_not_found);
-                }
+            } catch (java.lang.InstantiationException e) {
+                mErrorMessage = getString(R.string.card_view_price_not_found);
+            }
 
+            return true;
+        } else if (item.getItemId() == R.id.changeset) {
+            showDialog(CardViewDialogFragment.CHANGE_SET);
+            return true;
+        } else if (item.getItemId() == R.id.legality) {
+            mActivity.setLoading();
+            if (mAsyncTask != null) {
+                mAsyncTask.cancel(true);
+            }
+            mAsyncTask = new FetchLegalityTask();
+            ((FetchLegalityTask) mAsyncTask).execute(this);
+            return true;
+        } else if (item.getItemId() == R.id.cardrulings) {
+            if (FamiliarActivity.getNetworkState(getActivity(), true) == -1) {
                 return true;
             }
-            case R.id.changeset: {
-                showDialog(CardViewDialogFragment.CHANGE_SET);
-                return true;
-            }
-            case R.id.legality: {
-                mActivity.setLoading();
-                if (mAsyncTask != null) {
-                    mAsyncTask.cancel(true);
-                }
-                mAsyncTask = new FetchLegalityTask();
-                ((FetchLegalityTask) mAsyncTask).execute((Void[]) null);
-                return true;
-            }
-            case R.id.cardrulings: {
-                if (FamiliarActivity.getNetworkState(getActivity(), true) == -1) {
-                    return true;
-                }
 
-                mActivity.setLoading();
-                if (mAsyncTask != null) {
-                    mAsyncTask.cancel(true);
-                }
-                mAsyncTask = new FetchRulingsTask();
-                ((FetchRulingsTask) mAsyncTask).execute((Void[]) null);
-                return true;
+            mActivity.setLoading();
+            if (mAsyncTask != null) {
+                mAsyncTask.cancel(true);
             }
-            case R.id.addtowishlist: {
-                showDialog(CardViewDialogFragment.WISH_LIST_COUNTS);
-                return true;
-            }
-            case R.id.addtodecklist: {
-                showDialog(CardViewDialogFragment.ADD_TO_DECKLIST);
-                return true;
-            }
-            case R.id.sharecard: {
-                showDialog(CardViewDialogFragment.SHARE_CARD);
-                return true;
-            }
-            case R.id.translatecard: {
-                showDialog(CardViewDialogFragment.TRANSLATE_CARD);
-                return true;
-            }
-            default: {
-                return super.onOptionsItemSelected(item);
-            }
+            mAsyncTask = new FetchRulingsTask();
+            ((FetchRulingsTask) mAsyncTask).execute(this);
+            return true;
+        } else if (item.getItemId() == R.id.addtowishlist) {
+            showDialog(CardViewDialogFragment.WISH_LIST_COUNTS);
+            return true;
+        } else if (item.getItemId() == R.id.addtodecklist) {
+            showDialog(CardViewDialogFragment.ADD_TO_DECKLIST);
+            return true;
+        } else if (item.getItemId() == R.id.sharecard) {
+            showDialog(CardViewDialogFragment.SHARE_CARD);
+            return true;
+        } else if (item.getItemId() == R.id.translatecard) {
+            showDialog(CardViewDialogFragment.TRANSLATE_CARD);
+            return true;
+        } else {
+            return super.onOptionsItemSelected(item);
         }
     }
 
@@ -1123,7 +1122,7 @@ public class CardViewFragment extends FamiliarFragment {
      * @param inflater The inflater to use to inflate the menu
      */
     @Override
-    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
+    public void onCreateOptionsMenu(@NonNull Menu menu, @NonNull MenuInflater inflater) {
         super.onCreateOptionsMenu(menu, inflater);
         inflater.inflate(R.menu.card_menu, menu);
     }
@@ -1138,22 +1137,18 @@ public class CardViewFragment extends FamiliarFragment {
      * @see #onCreateOptionsMenu
      */
     @Override
-    public void onPrepareOptionsMenu(Menu menu) {
+    public void onPrepareOptionsMenu(@NonNull Menu menu) {
         super.onPrepareOptionsMenu(menu);
 
-        /* If the image has been loaded to the main page, remove the menu option for image */
-        if (PreferenceAdapter.getPicFirst(getContext())) {
-            menu.findItem(R.id.image).setVisible(false);
-        } else {
-            menu.findItem(R.id.image).setVisible(true);
+        try {
+            /* If the image has been loaded to the main page, remove the menu option for image */
+            menu.findItem(R.id.image).setVisible(!PreferenceAdapter.getPicFirst(getContext()));
+        } catch (NullPointerException e) {
+            // eh, couldn't find the menu item. Image _should_ be there
         }
 
         /* If this is an online-only card, hide the price lookup button */
-        if (mIsOnlineOnly) {
-            menu.findItem(R.id.price).setVisible(false);
-        } else {
-            menu.findItem(R.id.price).setVisible(true);
-        }
+        menu.findItem(R.id.price).setVisible(!mIsOnlineOnly);
         /* This code removes the "change set" button if there is only one set.
          * Turns out some users use it to view the full set name when there is only one set/
          * I'm leaving it here, but commented, for posterity */
@@ -1179,6 +1174,7 @@ public class CardViewFragment extends FamiliarFragment {
             ruling = r;
         }
 
+        @NonNull
         public String toString() {
             return date + ": " + ruling;
         }
@@ -1188,7 +1184,7 @@ public class CardViewFragment extends FamiliarFragment {
      * This private class handles asking the database about the legality of a card, and will
      * eventually show the information in a Dialog.
      */
-    private class FetchLegalityTask extends AsyncTask<Void, Void, Void> {
+    private static class FetchLegalityTask extends AsyncTask<CardViewFragment, Void, CardViewFragment> {
 
         /**
          * Queries the data in the database to see what sets this card is legal in.
@@ -1197,56 +1193,64 @@ public class CardViewFragment extends FamiliarFragment {
          * @return unused
          */
         @Override
-        protected Void doInBackground(Void... params) {
+        protected CardViewFragment doInBackground(CardViewFragment... params) {
 
+            CardViewFragment frag = params[0];
             Cursor cFormats = null;
             FamiliarDbHandle handle = new FamiliarDbHandle();
             try {
-                SQLiteDatabase database = DatabaseManager.openDatabase(mActivity, false, handle);
+                SQLiteDatabase database = DatabaseManager.openDatabase(frag.mActivity, false, handle);
                 cFormats = CardDbAdapter.fetchAllFormats(database);
-                mFormats = new String[cFormats.getCount()];
-                mLegalities = new String[cFormats.getCount()];
+                frag.mFormats = new String[cFormats.getCount()];
+                frag.mLegalities = new String[cFormats.getCount()];
 
                 cFormats.moveToFirst();
                 for (int i = 0; i < cFormats.getCount(); i++) {
-                    mFormats[i] =
-                            cFormats.getString(cFormats.getColumnIndex(CardDbAdapter.KEY_NAME));
-                    switch (CardDbAdapter.checkLegality(mCard.getName(), mFormats[i], database)) {
+                    frag.mFormats[i] = cFormats.getString(cFormats.getColumnIndex(CardDbAdapter.KEY_NAME));
+                    switch (CardDbAdapter.checkLegality(frag.mCard.getName(), frag.mFormats[i], database)) {
                         case CardDbAdapter.LEGAL:
-                            mLegalities[i] = getString(R.string.card_view_legal);
+                            if ("Reserved List".equals(frag.mFormats[i])) {
+                                frag.mLegalities[i] = frag.getString(R.string.card_not_on_reserved_list);
+                            } else {
+                                frag.mLegalities[i] = frag.getString(R.string.card_view_legal);
+                            }
                             break;
                         case CardDbAdapter.RESTRICTED:
                             /* For backwards compatibility, we list cards that are legal in
                              * commander, but can't be the commander as Restricted in the legality
                              * file.  This prevents older version of the app from throwing an
                              * IllegalStateException if we try including a new legality. */
-                            if (mFormats[i].equalsIgnoreCase("Commander") ||
-                                    mFormats[i].equalsIgnoreCase("Brawl")) {
-                                mLegalities[i] = getString(R.string.card_view_no_commander);
+                            if (frag.mFormats[i].equalsIgnoreCase("Commander") ||
+                                    frag.mFormats[i].equalsIgnoreCase("Brawl")) {
+                                frag.mLegalities[i] = frag.getString(R.string.card_view_no_commander);
                             } else {
-                                mLegalities[i] = getString(R.string.card_view_restricted);
+                                frag.mLegalities[i] = frag.getString(R.string.card_view_restricted);
                             }
                             break;
                         case CardDbAdapter.BANNED:
-                            mLegalities[i] = getString(R.string.card_view_banned);
+                            if ("Reserved List".equals(frag.mFormats[i])) {
+                                frag.mLegalities[i] = frag.getString(R.string.card_on_reserved_list);
+                            } else {
+                                frag.mLegalities[i] = frag.getString(R.string.card_view_banned);
+                            }
                             break;
                         default:
-                            mLegalities[i] = getString(R.string.error);
+                            frag.mLegalities[i] = frag.getString(R.string.error);
                             break;
                     }
                     cFormats.moveToNext();
                 }
             } catch (SQLiteException | FamiliarDbException e) {
-                CardViewFragment.this.handleFamiliarDbException(false);
-                mLegalities = null;
+                frag.handleFamiliarDbException(false);
+                frag.mLegalities = null;
             } finally {
                 if (null != cFormats) {
                     cFormats.close();
                 }
-                DatabaseManager.closeDatabase(mActivity, handle);
+                DatabaseManager.closeDatabase(frag.mActivity, handle);
             }
 
-            return null;
+            return frag;
         }
 
         /**
@@ -1255,20 +1259,20 @@ public class CardViewFragment extends FamiliarFragment {
          * @param result unused
          */
         @Override
-        protected void onPostExecute(Void result) {
+        protected void onPostExecute(CardViewFragment result) {
             try {
-                showDialog(CardViewDialogFragment.GET_LEGALITY);
+                result.showDialog(CardViewDialogFragment.GET_LEGALITY);
             } catch (IllegalStateException e) {
                 /* eat it */
             }
-            mActivity.clearLoading();
+            result.mActivity.clearLoading();
         }
     }
 
     /**
      * This private class fetches rulings about this card from gatherer.wizards.com.
      */
-    private class FetchRulingsTask extends AsyncTask<Void, Void, Void> {
+    private static class FetchRulingsTask extends AsyncTask<CardViewFragment, Void, CardViewFragment> {
 
         String mErrorMessage = null;
 
@@ -1281,20 +1285,22 @@ public class CardViewFragment extends FamiliarFragment {
          */
         @Override
         @SuppressWarnings("SpellCheckingInspection")
-        protected Void doInBackground(Void... params) {
+        protected CardViewFragment doInBackground(CardViewFragment... params) {
 
+            CardViewFragment frag = params[0];
             URL url;
             InputStream is = null;
 
-            mRulingsArrayList = new ArrayList<>();
+            frag.mRulingsArrayList = new ArrayList<>();
             try {
-                url = new URL("http://gatherer.wizards.com/Pages/Card/Details.aspx?multiverseid=" + mCard.getMultiverseId());
-                is = FamiliarActivity.getHttpInputStream(url, null, getContext());
+                // Gatherer doesn't use HTTPS as of 1/6/2019
+                url = new URL("https://gatherer.wizards.com/Pages/Card/Details.aspx?multiverseid=" + frag.mCard.getMultiverseId());
+                is = FamiliarActivity.getHttpInputStream(url, null, frag.getContext());
                 if (is == null) {
                     throw new IOException("null stream");
                 }
 
-                String gathererPage = IOUtils.toString(is);
+                String gathererPage = IOUtils.toString(is, StandardCharsets.UTF_8);
                 String date;
 
                 Document document = Jsoup.parse(gathererPage);
@@ -1312,7 +1318,7 @@ public class CardViewFragment extends FamiliarFragment {
                         symbol.html(symbolString);
                     }
                     Ruling r = new Ruling(date, rulingText.text());
-                    mRulingsArrayList.add(r);
+                    frag.mRulingsArrayList.add(r);
                 }
             } catch (Exception ioe) {
                 mErrorMessage = ioe.getLocalizedMessage();
@@ -1326,7 +1332,7 @@ public class CardViewFragment extends FamiliarFragment {
                 }
             }
 
-            return null;
+            return frag;
         }
 
         /**
@@ -1335,19 +1341,19 @@ public class CardViewFragment extends FamiliarFragment {
          * @param result unused
          */
         @Override
-        protected void onPostExecute(Void result) {
+        protected void onPostExecute(CardViewFragment result) {
 
             if (mErrorMessage == null) {
                 try {
-                    showDialog(CardViewDialogFragment.CARD_RULINGS);
+                    result.showDialog(CardViewDialogFragment.CARD_RULINGS);
                 } catch (IllegalStateException e) {
                     /* eat it */
                 }
             } else {
-                removeDialog(getFragmentManager());
-                SnackbarWrapper.makeAndShowText(mActivity, mErrorMessage, SnackbarWrapper.LENGTH_SHORT);
+                result.removeDialog(result.getFragmentManager());
+                SnackbarWrapper.makeAndShowText(result.mActivity, mErrorMessage, SnackbarWrapper.LENGTH_SHORT);
             }
-            mActivity.clearLoading();
+            result.mActivity.clearLoading();
         }
     }
 
@@ -1362,19 +1368,16 @@ public class CardViewFragment extends FamiliarFragment {
      */
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        switch (requestCode) {
-            case FamiliarActivity.REQUEST_WRITE_EXTERNAL_STORAGE_IMAGE: {
-                // If request is cancelled, the result arrays are empty.
-                if (grantResults.length > 0
-                        && grantResults[0] == PackageManager.PERMISSION_GRANTED
-                        && permissions[0].equals(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
-                    /* Permission granted, run the task again */
-                    saveImageWithGlide(mSaveImageWhereTo);
-                } else {
-                    /* Permission denied */
-                    SnackbarWrapper.makeAndShowText(getActivity(), R.string.card_view_unable_to_save_image,
-                            SnackbarWrapper.LENGTH_LONG);
-                }
+        if (requestCode == FamiliarActivity.REQUEST_WRITE_EXTERNAL_STORAGE_IMAGE) {// If request is cancelled, the result arrays are empty.
+            if (grantResults.length > 0
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED
+                    && permissions[0].equals(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+                /* Permission granted, run the task again */
+                saveImageWithGlide(mSaveImageWhereTo);
+            } else {
+                /* Permission denied */
+                SnackbarWrapper.makeAndShowText(getActivity(), R.string.card_view_unable_to_save_image,
+                        SnackbarWrapper.LENGTH_LONG);
             }
         }
     }

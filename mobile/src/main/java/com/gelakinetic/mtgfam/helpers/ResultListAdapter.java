@@ -23,7 +23,6 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.database.Cursor;
-import android.support.v4.content.ContextCompat;
 import android.text.Html.ImageGetter;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -31,10 +30,13 @@ import android.view.ViewGroup;
 import android.widget.SimpleCursorAdapter;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
+
 import com.gelakinetic.mtgfam.R;
 import com.gelakinetic.mtgfam.helpers.database.CardDbAdapter;
 
-import org.jetbrains.annotations.NotNull;
+import java.util.Locale;
 
 /**
  * This list adapter is used to display a list of search results. It implements SectionIndexer to enable fast scrolling.
@@ -93,15 +95,13 @@ public class ResultListAdapter extends SimpleCursorAdapter {
      * @param cursor  The cursor from which to get the data. The cursor is already moved to the correct position.
      */
     @Override
-    public void bindView(@NotNull View view, Context context, @NotNull Cursor cursor) {
+    public void bindView(@NonNull View view, Context context, @NonNull Cursor cursor) {
 
         boolean hideCost = true;
-        boolean hideSet = true;
         boolean hideType = true;
         boolean hideAbility = true;
         boolean hidePT = true;
         boolean hideLoyalty = true;
-        boolean hideRarity = true;
 
         /* make sure these elements are showing (views get recycled) */
         view.findViewById(R.id.cardp).setVisibility(View.VISIBLE);
@@ -129,7 +129,6 @@ public class ResultListAdapter extends SimpleCursorAdapter {
                 case CardDbAdapter.KEY_SET: {
                     char rarity = (char) cursor.getInt(cursor.getColumnIndex(CardDbAdapter.KEY_RARITY));
                     String name = cursor.getString(cursor.getColumnIndex(mFrom[i]));
-                    hideSet = false;
                     textField.setText(name);
                     switch (rarity) {
                         case 'c':
@@ -153,12 +152,15 @@ public class ResultListAdapter extends SimpleCursorAdapter {
                             textField.setTextColor(ContextCompat.getColor(context, getResourceIdFromAttr(R.attr.color_timeshifted)));
                             break;
                     }
+
+                    if (PreferenceAdapter.getSetPref(context)) {
+                        ExpansionImageHelper.loadExpansionImage(context, name, rarity, view.findViewById(R.id.cardsetimage), view.findViewById(R.id.cardset), ExpansionImageHelper.ExpansionImageSize.LARGE);
+                    }
                     break;
                 }
                 case CardDbAdapter.KEY_RARITY: {
                     char rarity = (char) cursor.getInt(cursor.getColumnIndex(CardDbAdapter.KEY_RARITY));
-                    textField.setText("(" + rarity + ")");
-                    hideRarity = false;
+                    textField.setText(String.format(Locale.getDefault(), "(%c)", rarity));
                     break;
                 }
                 case CardDbAdapter.KEY_SUPERTYPE: {
@@ -174,7 +176,8 @@ public class ResultListAdapter extends SimpleCursorAdapter {
                     textField.setText(csq);
                     break;
                 }
-                case CardDbAdapter.KEY_POWER: {
+                case CardDbAdapter.KEY_POWER:
+                case CardDbAdapter.KEY_TOUGHNESS: {
                     float p = cursor.getFloat(cursor.getColumnIndex(mFrom[i]));
                     boolean shouldShowSign =
                             cursor.getString(cursor.getColumnIndex(CardDbAdapter.KEY_SET)).equals("UST") &&
@@ -182,17 +185,6 @@ public class ResultListAdapter extends SimpleCursorAdapter {
                     if (p != CardDbAdapter.NO_ONE_CARES) {
                         hidePT = false;
                         textField.setText(CardDbAdapter.getPrintedPTL(p, shouldShowSign));
-                    }
-                    break;
-                }
-                case CardDbAdapter.KEY_TOUGHNESS: {
-                    float t = cursor.getFloat(cursor.getColumnIndex(mFrom[i]));
-                    boolean shouldShowSign =
-                            cursor.getString(cursor.getColumnIndex(CardDbAdapter.KEY_SET)).equals("UST") &&
-                                    cursor.getString(cursor.getColumnIndex(CardDbAdapter.KEY_ABILITY)).contains("Augment {");
-                    if (t != CardDbAdapter.NO_ONE_CARES) {
-                        hidePT = false;
-                        textField.setText(CardDbAdapter.getPrintedPTL(t, shouldShowSign));
                     }
                     break;
                 }
@@ -211,8 +203,12 @@ public class ResultListAdapter extends SimpleCursorAdapter {
         if (hideCost) {
             view.findViewById(R.id.cardcost).setVisibility(View.GONE);
         }
-        if (hideSet) {
-            view.findViewById(R.id.cardset).setVisibility(View.GONE);
+        if (PreferenceAdapter.getSetPref(context)) {
+            view.findViewById(R.id.cardsetcombo).setVisibility(View.VISIBLE);
+            view.findViewById(R.id.rarity).setVisibility(View.VISIBLE);
+        } else {
+            view.findViewById(R.id.cardsetcombo).setVisibility(View.GONE);
+            view.findViewById(R.id.rarity).setVisibility(View.GONE);
         }
         if (hideType) {
             view.findViewById(R.id.cardtype).setVisibility(View.GONE);
@@ -228,9 +224,6 @@ public class ResultListAdapter extends SimpleCursorAdapter {
             view.findViewById(R.id.cardslash).setVisibility(View.GONE);
             view.findViewById(R.id.cardt).setVisibility(View.GONE);
         }
-        if (hideRarity) {
-            view.findViewById(R.id.rarity).setVisibility(View.GONE);
-        }
     }
 
     /**
@@ -241,7 +234,6 @@ public class ResultListAdapter extends SimpleCursorAdapter {
      */
     private int getResourceIdFromAttr(int attr) {
         TypedArray ta = mTheme.obtainStyledAttributes(new int[]{attr});
-        assert ta != null;
         int resId = ta.getResourceId(0, 0);
         ta.recycle();
         return resId;

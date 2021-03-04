@@ -21,8 +21,6 @@ package com.gelakinetic.mtgfam.fragments;
 
 import android.graphics.PorterDuff;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.v4.content.ContextCompat;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -34,9 +32,13 @@ import android.widget.TextSwitcher;
 import android.widget.TextView;
 import android.widget.ViewSwitcher;
 
+import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
+
 import com.gelakinetic.mtgfam.R;
 import com.gelakinetic.mtgfam.helpers.NumberButtonOnClickListener;
 
+import java.util.Objects;
 import java.util.Random;
 
 /**
@@ -82,7 +84,7 @@ public class DiceFragment extends FamiliarFragment implements ViewSwitcher.ViewF
         ImageButton dN = myFragmentView.findViewById(R.id.dN);
 
         /* Color the die faces */
-        int color = ContextCompat.getColor(getContext(), R.color.colorPrimary_light);
+        int color = ContextCompat.getColor(Objects.requireNonNull(getContext()), R.color.colorPrimary_light);
 
         if (d2 != null) {
             d2.setOnClickListener(view -> flipCoin());
@@ -161,13 +163,10 @@ public class DiceFragment extends FamiliarFragment implements ViewSwitcher.ViewF
     private void flipCoin() {
         if (mDieOutput != null) {
             String output;
-            switch (mRandom.nextInt(2)) {
-                case 0:
-                    output = getString(R.string.dice_heads);
-                    break;
-                default:
-                    output = getString(R.string.dice_tails);
-                    break;
+            if (mRandom.nextInt(2) == 0) {
+                output = getString(R.string.dice_heads);
+            } else {
+                output = getString(R.string.dice_tails);
             }
             mDieOutput.setText(output);
         }

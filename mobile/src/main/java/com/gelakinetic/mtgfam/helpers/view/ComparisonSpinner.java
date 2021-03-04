@@ -21,18 +21,19 @@ package com.gelakinetic.mtgfam.helpers.view;
 
 
 import android.content.Context;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.gelakinetic.mtgfam.R;
 import com.gelakinetic.mtgfam.helpers.model.Comparison;
 
-public class ComparisonSpinner extends android.support.v7.widget.AppCompatSpinner {
+public class ComparisonSpinner extends androidx.appcompat.widget.AppCompatSpinner {
 
     public ComparisonSpinner(Context context, AttributeSet attrs) {
         super(context, attrs);

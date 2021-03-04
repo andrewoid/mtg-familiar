@@ -19,6 +19,10 @@
 
 package com.gelakinetic.mtgfam.helpers.database;
 
+import androidx.annotation.NonNull;
+
+import com.gelakinetic.mtgfam.helpers.FamiliarLogger;
+
 /**
  * Extend Exception instead of RuntimeException to force the compiler to whine about lack of try/catch blocks
  */
@@ -34,6 +38,11 @@ public class FamiliarDbException extends Exception {
      */
     public FamiliarDbException(Exception e) {
         mInnerException = e;
+        // Log this exception
+        StringBuilder sb = new StringBuilder(e.getMessage());
+        sb.append(e.getMessage()).append('\n');
+        sb.append(org.apache.commons.lang3.exception.ExceptionUtils.getStackTrace(e)).append('\n');
+        FamiliarLogger.appendToLogFile(sb, "FamiliarDbException");
     }
 
     /**
@@ -41,6 +50,7 @@ public class FamiliarDbException extends Exception {
      *
      * @return An explanation of the exception
      */
+    @NonNull
     @Override
     public String toString() {
         return mInnerException.toString();

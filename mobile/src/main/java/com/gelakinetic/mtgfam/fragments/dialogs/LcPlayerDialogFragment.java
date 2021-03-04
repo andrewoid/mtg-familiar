@@ -22,7 +22,6 @@ package com.gelakinetic.mtgfam.fragments.dialogs;
 import android.annotation.SuppressLint;
 import android.app.Dialog;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
 import android.text.InputType;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -30,12 +29,16 @@ import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.afollestad.materialdialogs.MaterialDialog;
 import com.gelakinetic.mtgfam.R;
 import com.gelakinetic.mtgfam.fragments.LifeCounterFragment;
 import com.gelakinetic.mtgfam.helpers.LcPlayer;
 
-import org.jetbrains.annotations.NotNull;
+import java.util.Locale;
+import java.util.Objects;
 
 /**
  * Class that creates dialogs for LcPlayer
@@ -70,7 +73,7 @@ public class LcPlayerDialogFragment extends FamiliarDialogFragment {
         mLcPlayer = player;
     }
 
-    @NotNull
+    @NonNull
     @Override
     public Dialog onCreateDialog(Bundle savedInstanceState) {
         if (!canCreateDialog()) {
@@ -81,7 +84,7 @@ public class LcPlayerDialogFragment extends FamiliarDialogFragment {
         /* This will be set to false if we are returning a null dialog. It prevents a crash */
         setShowsDialog(true);
 
-        mDialogId = getArguments().getInt(ID_KEY);
+        mDialogId = Objects.requireNonNull(getArguments()).getInt(ID_KEY);
         final int position = getArguments().getInt(POSITION_KEY);
 
         if (null == getParentLifeCounterFragment()) {
@@ -91,7 +94,7 @@ public class LcPlayerDialogFragment extends FamiliarDialogFragment {
         switch (mDialogId) {
             case DIALOG_SET_NAME: {
                 /* Inflate a view to type in the player's name, and show it in an AlertDialog */
-                @SuppressLint("InflateParams") View textEntryView = getActivity().getLayoutInflater().inflate(
+                @SuppressLint("InflateParams") View textEntryView = Objects.requireNonNull(getActivity()).getLayoutInflater().inflate(
                         R.layout.alert_dialog_text_entry, null, false);
                 assert textEntryView != null;
                 final EditText nameInput = textEntryView.findViewById(R.id.text_entry);
@@ -117,7 +120,7 @@ public class LcPlayerDialogFragment extends FamiliarDialogFragment {
                         })
                         .negativeText(R.string.dialog_cancel)
                         .build();
-                dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+                Objects.requireNonNull(dialog.getWindow()).setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
                 return dialog;
             }
             case DIALOG_COMMANDER_DAMAGE: {
@@ -132,24 +135,24 @@ public class LcPlayerDialogFragment extends FamiliarDialogFragment {
                 final int[] delta = {0};
                 final int[] absolute = {mLcPlayer.mCommanderDamage.get(position).mLife};
 
-                deltaText.setText(((delta[0] >= 0) ? "+" : "") + delta[0]);
-                absoluteText.setText("" + absolute[0]);
+                deltaText.setText(String.format(Locale.getDefault(), "+%d", delta[0]));
+                absoluteText.setText(String.format(Locale.getDefault(), "%d", absolute[0]));
 
                 view.findViewById(R.id.commander_plus1).setOnClickListener(v -> {
                     delta[0]++;
                     absolute[0]++;
-                    deltaText.setText(((delta[0] >= 0) ? "+" : "") + delta[0]);
-                    absoluteText.setText("" + absolute[0]);
+                    deltaText.setText(String.format(Locale.getDefault(), "%s%d", ((delta[0] >= 0) ? "+" : ""), delta[0]));
+                    absoluteText.setText(String.format(Locale.getDefault(), "%d", absolute[0]));
                 });
 
                 view.findViewById(R.id.commander_minus1).setOnClickListener(v -> {
                     delta[0]--;
                     absolute[0]--;
-                    deltaText.setText(((delta[0] >= 0) ? "+" : "") + delta[0]);
-                    absoluteText.setText("" + absolute[0]);
+                    deltaText.setText(String.format(Locale.getDefault(), "%s%d", ((delta[0] >= 0) ? "+" : ""), delta[0]));
+                    absoluteText.setText(String.format(Locale.getDefault(), "%d", absolute[0]));
                 });
 
-                MaterialDialog.Builder builder = new MaterialDialog.Builder(this.getActivity());
+                MaterialDialog.Builder builder = new MaterialDialog.Builder(Objects.requireNonNull(this.getActivity()));
                 builder.title(String.format(getResources().getString(R.string.life_counter_edh_dialog_title),
                         mLcPlayer.mCommanderDamage.get(position).mName))
                         .customView(view, false)
@@ -165,7 +168,7 @@ public class LcPlayerDialogFragment extends FamiliarDialogFragment {
             }
             case DIALOG_CHANGE_LIFE: {
                 /* Inflate a view to type in a new life, then show it in an AlertDialog */
-                @SuppressLint("InflateParams") View textEntryView2 = getActivity().getLayoutInflater().inflate(
+                @SuppressLint("InflateParams") View textEntryView2 = Objects.requireNonNull(getActivity()).getLayoutInflater().inflate(
                         R.layout.alert_dialog_text_entry, null, false);
                 assert textEntryView2 != null;
                 final EditText lifeInput = textEntryView2.findViewById(R.id.text_entry);
@@ -202,7 +205,7 @@ public class LcPlayerDialogFragment extends FamiliarDialogFragment {
                         })
                         .negativeText(R.string.dialog_cancel)
                         .build();
-                dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+                Objects.requireNonNull(dialog.getWindow()).setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
                 return dialog;
             }
             default: {

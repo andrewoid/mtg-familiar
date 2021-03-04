@@ -22,13 +22,15 @@ package com.gelakinetic.mtgfam.fragments.dialogs;
 import android.app.Dialog;
 import android.content.DialogInterface;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.afollestad.materialdialogs.MaterialDialog;
 import com.gelakinetic.mtgfam.R;
 import com.gelakinetic.mtgfam.fragments.SearchViewFragment;
 
-import org.jetbrains.annotations.NotNull;
+import java.util.Objects;
 
 /**
  * Class that creates dialogs for SearchViewFragment
@@ -51,7 +53,7 @@ public class SearchViewDialogFragment extends FamiliarDialogFragment {
     }
 
     @Override
-    public void onDismiss(DialogInterface dialog) {
+    public void onDismiss(@NonNull DialogInterface dialog) {
         super.onDismiss(dialog);
         try {
             if (null != getParentSearchViewFragment()) {
@@ -62,7 +64,7 @@ public class SearchViewDialogFragment extends FamiliarDialogFragment {
         }
     }
 
-    @NotNull
+    @NonNull
     @Override
     public Dialog onCreateDialog(Bundle savedInstanceState) {
         if (!canCreateDialog()) {
@@ -73,7 +75,7 @@ public class SearchViewDialogFragment extends FamiliarDialogFragment {
         /* This will be set to false if we are returning a null dialog. It prevents a crash */
         setShowsDialog(true);
 
-        mDialogId = getArguments().getInt(ID_KEY);
+        mDialogId = Objects.requireNonNull(getArguments()).getInt(ID_KEY);
 
         if (null == getParentSearchViewFragment()) {
             return DontShowDialog();
@@ -84,7 +86,7 @@ public class SearchViewDialogFragment extends FamiliarDialogFragment {
                 already filled in onCreate() */
             switch (mDialogId) {
                 case FORMAT_LIST: {
-                    getParentSearchViewFragment().mFormatDialog = new MaterialDialog.Builder(this.getActivity())
+                    getParentSearchViewFragment().mFormatDialog = new MaterialDialog.Builder(Objects.requireNonNull(this.getActivity()))
                             .title(R.string.search_formats)
                             .items((CharSequence[]) getParentSearchViewFragment().mFormatNames)
                             .itemsCallbackSingleChoice(getParentSearchViewFragment().mSelectedFormat, (dialog, itemView, which, text) -> {
@@ -99,7 +101,7 @@ public class SearchViewDialogFragment extends FamiliarDialogFragment {
                     return DontShowDialog();
                 }
                 case RARITY_LIST: {
-                    getParentSearchViewFragment().mRarityDialog = new MaterialDialog.Builder(this.getActivity())
+                    getParentSearchViewFragment().mRarityDialog = new MaterialDialog.Builder(Objects.requireNonNull(this.getActivity()))
                             .title(R.string.search_rarities)
                             .positiveText(R.string.dialog_ok)
                             .items((CharSequence[]) getParentSearchViewFragment().mRarityNames)
@@ -135,7 +137,7 @@ public class SearchViewDialogFragment extends FamiliarDialogFragment {
      * @return An int[] with the same values as "which"
      */
     private int[] toIntArray(Integer[] which) {
-        int tmp[] = new int[which.length];
+        int[] tmp = new int[which.length];
         for (int i = 0; i < which.length; i++) {
             tmp[i] = which[i];
         }
@@ -149,7 +151,7 @@ public class SearchViewDialogFragment extends FamiliarDialogFragment {
      * @return An int[] with the same values as "which"
      */
     private Integer[] toIntegerArray(int[] which) {
-        Integer tmp[] = new Integer[which.length];
+        Integer[] tmp = new Integer[which.length];
         for (int i = 0; i < which.length; i++) {
             tmp[i] = which[i];
         }

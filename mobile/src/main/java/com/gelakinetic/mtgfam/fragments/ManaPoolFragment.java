@@ -20,9 +20,6 @@
 package com.gelakinetic.mtgfam.fragments;
 
 import android.os.Bundle;
-import android.support.annotation.IdRes;
-import android.support.annotation.NonNull;
-import android.support.annotation.StringRes;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -31,7 +28,12 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
+import androidx.annotation.IdRes;
+import androidx.annotation.NonNull;
+import androidx.annotation.StringRes;
+
 import com.gelakinetic.mtgfam.R;
+import com.gelakinetic.mtgfam.helpers.NumberButtonOnClickListener;
 import com.gelakinetic.mtgfam.helpers.PreferenceAdapter;
 
 import java.util.ArrayList;
@@ -70,6 +72,23 @@ public class ManaPoolFragment extends FamiliarFragment {
                     mCount = 0;
                 }
                 updateReadout();
+            });
+            mReadout.setOnClickListener(new NumberButtonOnClickListener(ManaPoolFragment.this) {
+                @Override
+                public void onDialogNumberSet(Integer number) {
+                    mCount = number;
+                    updateReadout();
+                }
+
+                @Override
+                public Integer getMinNumber() {
+                    return 0;
+                }
+
+                @Override
+                public Integer getInitialValue() {
+                    return mCount;
+                }
             });
         }
 
@@ -175,14 +194,13 @@ public class ManaPoolFragment extends FamiliarFragment {
      */
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
-            case R.id.clear_all:
-                for (ManaPoolItem manaPoolItem : mManaPoolItems) {
-                    manaPoolItem.clearCount();
-                }
-                return true;
-            default:
-                return super.onOptionsItemSelected(item);
+        if (item.getItemId() == R.id.clear_all) {
+            for (ManaPoolItem manaPoolItem : mManaPoolItems) {
+                manaPoolItem.clearCount();
+            }
+            return true;
+        } else {
+            return super.onOptionsItemSelected(item);
         }
     }
 
@@ -193,7 +211,7 @@ public class ManaPoolFragment extends FamiliarFragment {
      * @param inflater The inflater to use to inflate the menu
      */
     @Override
-    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
+    public void onCreateOptionsMenu(@NonNull Menu menu, @NonNull MenuInflater inflater) {
         super.onCreateOptionsMenu(menu, inflater);
         inflater.inflate(R.menu.manapool_menu, menu);
     }

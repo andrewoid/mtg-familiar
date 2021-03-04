@@ -23,12 +23,6 @@ import android.app.SearchManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.v4.app.Fragment;
-import android.support.v4.app.FragmentActivity;
-import android.support.v4.app.FragmentManager;
-import android.support.v4.app.FragmentTransaction;
-import android.support.v7.widget.SearchView;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -36,9 +30,18 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.NonNull;
+import androidx.appcompat.widget.SearchView;
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentActivity;
+import androidx.fragment.app.FragmentManager;
+import androidx.fragment.app.FragmentTransaction;
+
 import com.gelakinetic.mtgfam.FamiliarActivity;
 import com.gelakinetic.mtgfam.R;
 import com.gelakinetic.mtgfam.helpers.SnackbarWrapper;
+
+import java.util.Objects;
 
 /**
  * This is the superclass for all fragments. It has a bunch of convenient methods
@@ -118,14 +121,16 @@ public abstract class FamiliarFragment extends Fragment {
      */
     @Override
     public void onSaveInstanceState(@NonNull Bundle outState) {
-        outState.putString("WORKAROUND_FOR_BUG_19917_KEY", "WORKAROUND_FOR_BUG_19917_VALUE");
+        if (outState.isEmpty()) {
+            outState.putString("WORKAROUND_FOR_BUG_19917_KEY", "WORKAROUND_FOR_BUG_19917_VALUE");
+        }
         super.onSaveInstanceState(outState);
+        FamiliarActivity.logBundleSize("OSSI " + this.getClass().getName(), outState);
     }
 
     /**
      * Called when the Fragment is no longer resumed.  This is generally
-     * tied to {@link FamiliarActivity#onPause() Activity.onPause} of the containing
-     * Activity's lifecycle.
+     * tied to Activity.onPause of the containing Activity's lifecycle.
      * <p>
      * In this case, always remove the dialog, since it can contain stale references to the pre-rotated activity and
      * fragment after rotation. The one exception is the change log dialog, which would get removed by TTS checking
@@ -145,7 +150,7 @@ public abstract class FamiliarFragment extends Fragment {
      * @param inflater The inflater to use to inflate the menu
      */
     @Override
-    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
+    public void onCreateOptionsMenu(@NonNull Menu menu, @NonNull MenuInflater inflater) {
         super.onCreateOptionsMenu(menu, inflater);
         menu.clear();
 
@@ -232,9 +237,9 @@ public abstract class FamiliarFragment extends Fragment {
      * @param frag The fragment to start
      * @param args Any arguments which the fragment takes
      */
-    public void startNewFragment(Fragment frag, Bundle args) {
+    public void startNewFragment(FamiliarFragment frag, Bundle args) {
         try {
-            FragmentManager fm = getActivity().getSupportFragmentManager();
+            FragmentManager fm = Objects.requireNonNull(getActivity()).getSupportFragmentManager();
             if (fm != null) {
                 frag.setArguments(args);
                 FragmentTransaction ft = fm.beginTransaction();
@@ -282,7 +287,7 @@ public abstract class FamiliarFragment extends Fragment {
                          * Otherwise pop the offending fragment */
                         if (fm.getFragments().size() == 1) {
                             activity.finish();
-                        } else {
+                        } else if (!fm.isStateSaved()) {
                             fm.popBackStack();
                         }
                     }
@@ -333,7 +338,7 @@ public abstract class FamiliarFragment extends Fragment {
      * @return The resource ID
      */
     public int getResourceIdFromAttr(int attr) {
-        return ((FamiliarActivity) getActivity()).getResourceIdFromAttr(attr);
+        return ((FamiliarActivity) Objects.requireNonNull(getActivity())).getResourceIdFromAttr(attr);
     }
 
     /**
@@ -344,4 +349,14 @@ public abstract class FamiliarFragment extends Fragment {
     public void receiveSortOrder(String orderByStr) {
     }
 
+    /**
+     * Override setArguments to also log the size of the arguments being set
+     *
+     * @param args Arguments to set
+     */
+    @Override
+    public void setArguments(Bundle args) {
+        super.setArguments(args);
+        FamiliarActivity.logBundleSize("SA " + this.getClass().getName(), args);
+    }
 }

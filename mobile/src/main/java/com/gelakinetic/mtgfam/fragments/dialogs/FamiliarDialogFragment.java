@@ -21,17 +21,20 @@ package com.gelakinetic.mtgfam.fragments.dialogs;
 
 import android.app.Dialog;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
-import android.support.v4.app.DialogFragment;
-import android.support.v4.app.Fragment;
-import android.support.v4.app.FragmentManager;
-import android.support.v4.app.FragmentTransaction;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.fragment.app.DialogFragment;
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentManager;
+import androidx.fragment.app.FragmentTransaction;
 
 import com.gelakinetic.mtgfam.FamiliarActivity;
 import com.gelakinetic.mtgfam.R;
 import com.gelakinetic.mtgfam.fragments.FamiliarFragment;
 
 import java.util.ArrayList;
+import java.util.Objects;
 
 /**
  * This is a superclass for all dialog fragments. It fixes some bugs and handles rotations nicely
@@ -77,9 +80,12 @@ public class FamiliarDialogFragment extends DialogFragment {
      * @param outState Bundle in which to place your saved state.
      */
     @Override
-    public void onSaveInstanceState(Bundle outState) {
-        outState.putString("WORKAROUND_FOR_BUG_19917_KEY", "WORKAROUND_FOR_BUG_19917_VALUE");
+    public void onSaveInstanceState(@NonNull Bundle outState) {
+        if (outState.isEmpty()) {
+            outState.putString("WORKAROUND_FOR_BUG_19917_KEY", "WORKAROUND_FOR_BUG_19917_VALUE");
+        }
         super.onSaveInstanceState(outState);
+        FamiliarActivity.logBundleSize("OSSI " + this.getClass().getName(), outState);
     }
 
     /**
@@ -124,7 +130,7 @@ public class FamiliarDialogFragment extends DialogFragment {
      */
     @Nullable
     private Fragment getDialogParentFragment() {
-        return getActivity().getSupportFragmentManager().findFragmentById(R.id.fragment_container);
+        return Objects.requireNonNull(getActivity()).getSupportFragmentManager().findFragmentById(R.id.fragment_container);
     }
 
     /**
@@ -153,7 +159,7 @@ public class FamiliarDialogFragment extends DialogFragment {
      * @return array of string file names, without the extension
      */
     String[] getFiles(String fileExtension) {
-        String[] files = this.getActivity().fileList();
+        String[] files = Objects.requireNonNull(this.getActivity()).fileList();
         ArrayList<String> validFiles = new ArrayList<>();
         for (String fileName : files) {
             if (fileName.endsWith(fileExtension)) {
@@ -173,6 +179,17 @@ public class FamiliarDialogFragment extends DialogFragment {
      */
     boolean canCreateDialog() {
         return (null != getDialogParentFragment()) &&
-                (!getDialogParentFragment().getActivity().isFinishing());
+                (!Objects.requireNonNull(getDialogParentFragment().getActivity()).isFinishing());
+    }
+
+    /**
+     * Override setArguments to also log the size of the arguments being set
+     *
+     * @param args Arguments to set
+     */
+    @Override
+    public void setArguments(Bundle args) {
+        super.setArguments(args);
+        FamiliarActivity.logBundleSize("SA " + this.getClass().getName(), args);
     }
 }

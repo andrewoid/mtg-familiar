@@ -38,6 +38,7 @@ import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -77,7 +78,7 @@ public class WishlistHelpers {
      * @param activity            A context to open the file and pop toasts with
      * @param mCompressedWishlist The wishlist to write to the file
      */
-    public static void WriteCompressedWishlist(Activity activity, ArrayList<CompressedWishlistInfo> mCompressedWishlist) {
+    public static void WriteCompressedWishlist(Activity activity, List<CompressedWishlistInfo> mCompressedWishlist) {
         if (null == activity) {
             // Context is null, don't try to write the wishlist
             return;
@@ -155,12 +156,10 @@ public class WishlistHelpers {
             try (BufferedReader br = new BufferedReader(new InputStreamReader(activity.openFileInput(WISHLIST_NAME)))) {
                 /* Read each line as a card, and add them to the ArrayList */
                 while ((line = br.readLine()) != null) {
-                    try {
-                        MtgCard card = MtgCard.fromWishlistString(line, false, activity);
+                    MtgCard card = MtgCard.fromWishlistString(line, false, activity);
+                    if (null != card) {
                         card.setIndex(orderAddedIdx++);
                         lWishlist.add(card);
-                    } catch (InstantiationException e) {
-                        /* Eat it */
                     }
                 }
             }
@@ -186,7 +185,7 @@ public class WishlistHelpers {
      * @param sharePrice          Whether or not the card price should be exported
      * @return A string containing all the wishlist data
      */
-    public static String GetSharableWishlist(ArrayList<CompressedWishlistInfo> mCompressedWishlist,
+    public static String GetSharableWishlist(List<CompressedWishlistInfo> mCompressedWishlist,
                                              Context ctx, boolean shareText, boolean sharePrice,
                                              MarketPriceInfo.PriceType priceOption) {
         StringBuilder readableWishlist = new StringBuilder();
@@ -219,7 +218,7 @@ public class WishlistHelpers {
                 /* Attempt to append the price */
                 if (sharePrice && isi.mPrice != null) {
                     double price;
-                    price = isi.mPrice.getPrice(isi.mIsFoil, priceOption);
+                    price = isi.mPrice.getPrice(isi.mIsFoil, priceOption).price;
                     if (price != 0) {
                         readableWishlist
                                 .append(", $")
@@ -306,7 +305,9 @@ public class WishlistHelpers {
 
             for (IndividualSetInfo isi : mInfo) {
                 try {
-                    sumWish += (isi.mPrice.getPrice(isi.mIsFoil, priceSetting) * isi.mNumberOf);
+                    if (null != isi.mPrice) {
+                        sumWish += (isi.mPrice.getPrice(isi.mIsFoil, priceSetting).price * isi.mNumberOf);
+                    }
                 } catch (NullPointerException e) {
                     /* eat it, no price is loaded */
                 }
@@ -383,7 +384,7 @@ public class WishlistHelpers {
                             break;
                         }
                         case CardDbAdapter.KEY_SET: {
-                            retVal = wish1.getExpansion().compareTo(wish2.getExpansion());
+                            retVal = wish1.getFirstExpansion().compareTo(wish2.getFirstExpansion());
                             break;
                         }
                         case SortOrderDialogFragment.KEY_PRICE: {
@@ -392,6 +393,10 @@ public class WishlistHelpers {
                         }
                         case SortOrderDialogFragment.KEY_ORDER: {
                             retVal = Integer.compare(wish1.getIndex(), wish2.getIndex());
+                            break;
+                        }
+                        case CardDbAdapter.KEY_RARITY: {
+                            retVal = Character.compare(wish1.getHighestRarity(), wish2.getHighestRarity());
                             break;
                         }
                     }
